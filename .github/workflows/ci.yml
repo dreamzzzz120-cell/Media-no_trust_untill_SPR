@@ -6,6 +6,9 @@ on:
     branches: [main]
 permissions:
   contents: write
+concurrency:
+  group: spr-media-passport-ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     runs-on: ubuntu-latest
