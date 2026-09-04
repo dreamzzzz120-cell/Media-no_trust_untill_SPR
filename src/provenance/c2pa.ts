@@ -3,32 +3,25 @@ import type { ProvenanceResult } from '../domain/media.js';
 
 export async function inspectC2pa(path: string, verifyTrust: boolean): Promise<ProvenanceResult> {
   try {
-    const settings = {
-      verify: {
-        verify_after_reading: true,
-        verify_trust: verifyTrust,
-        ocsp_fetch: false,
-      },
-    };
+    const settings = { verify: { verify_after_reading: true, verify_trust: verifyTrust, ocsp_fetch: false, remote_manifest_fetch: false } };
     const reader = await Reader.fromAsset({ path }, settings);
-    const store = reader.json();
+    if (!reader) return { status: 'absent', embedded: false, trusted: false, errors: [] };
+    const store = reader.json() as Record<string, unknown>;
     const active = reader.getActive();
     const embedded = Boolean(reader.isEmbedded());
-    const trusted = Boolean((active as { validation_status?: unknown } | undefined)?.validation_status);
+    const validationStatus = store.validation_status;
+    const validationState = store.validation_state;
+    const hasValidationErrors = Array.isArray(validationStatus) && validationStatus.length > 0;
+    const trusted = embedded && !hasValidationErrors && (validationState === undefined || validationState === 'Trusted' || validationState === 'Valid');
     return {
       status: embedded ? (trusted ? 'verified' : 'present_untrusted') : 'absent',
       embedded,
       trusted,
       activeManifest: active ?? undefined,
-      manifestStore: store ?? undefined,
-      errors: [],
+      manifestStore: store,
+      errors: hasValidationErrors ? ['C2PA validation reported one or more validation-status entries'] : [],
     };
   } catch (error) {
-    return {
-      status: 'error',
-      embedded: false,
-      trusted: false,
-      errors: [error instanceof Error ? error.message.slice(0, 500) : 'C2PA inspection failed'],
-    };
+    return { status: 'error', embedded: false, trusted: false, errors: [error instanceof Error ? error.message.slice(0, 500) : 'C2PA inspection failed'] };
   }
 }
