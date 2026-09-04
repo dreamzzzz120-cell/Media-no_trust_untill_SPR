@@ -4,6 +4,8 @@ import type { VerificationRecord } from './domain/media.js';
 export interface RecordStore {
   save(record: VerificationRecord): Promise<void>;
   get(id: string): Promise<VerificationRecord | null>;
+  ready(): Promise<boolean>;
+  close(): Promise<void>;
 }
 
 export function createStore(databaseUrl: string | undefined): RecordStore {
@@ -22,6 +24,8 @@ class MemoryStore implements RecordStore {
   private readonly records = new Map<string, VerificationRecord>();
   async save(record: VerificationRecord) { this.records.set(record.asset.id, structuredClone(record)); }
   async get(id: string) { return structuredClone(this.records.get(id) ?? null); }
+  async ready() { return true; }
+  async close() { this.records.clear(); }
 }
 
 class PostgresStore implements RecordStore {
@@ -41,4 +45,15 @@ class PostgresStore implements RecordStore {
     `;
     return rows[0]?.record_json ?? null;
   }
+
+  async ready() {
+    try {
+      await this.sql`SELECT 1`;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async close() { await this.sql.end({ timeout: 5 }); }
 }
