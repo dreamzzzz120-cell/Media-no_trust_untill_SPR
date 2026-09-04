@@ -9,10 +9,13 @@ const schema = z.object({
   LOG_LEVEL: z.enum(['fatal','error','warn','info','debug','trace','silent']).default('info'),
   MAX_UPLOAD_BYTES: z.coerce.number().int().min(1_000_000).max(5_000_000_000).default(524_288_000),
   UPLOAD_DIR: z.string().min(1).default('.storage/uploads'),
+  DATABASE_URL: z.string().url().optional(),
   API_KEY: z.string().min(32).optional(),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(900_000).default(120_000),
   REQUIRE_API_KEY: bool.default(true),
+  TRUST_PROXY: bool.default(false),
   C2PA_VERIFY_TRUST: bool.default(true),
   C2PA_OCSP_FETCH: bool.default(false)
 });
@@ -21,8 +24,9 @@ export type Config = z.infer<typeof schema>;
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = schema.safeParse(env);
-  if (!parsed.success) {
-    throw new Error(`Invalid configuration: ${parsed.error.message}`);
+  if (!parsed.success) throw new Error(`Invalid configuration: ${parsed.error.message}`);
+  if (parsed.data.NODE_ENV === 'production' && !parsed.data.DATABASE_URL) {
+    throw new Error('DATABASE_URL is required in production');
   }
   if (parsed.data.REQUIRE_API_KEY && (!parsed.data.API_KEY || parsed.data.API_KEY.length < 32)) {
     throw new Error('REQUIRE_API_KEY=true requires API_KEY with at least 32 characters');
