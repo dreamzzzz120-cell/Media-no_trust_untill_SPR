@@ -15,10 +15,12 @@ FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production
 ENV PORT=8080
 WORKDIR /app
-RUN useradd --system --uid 10001 appuser && mkdir -p /app/.storage/uploads && chown -R appuser:appuser /app
+RUN useradd --system --uid 10001 appuser && mkdir -p /data/uploads && chown -R appuser:appuser /data /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY public ./public
 COPY package.json ./
 USER appuser
 EXPOSE 8080
+VOLUME ["/data"]
 CMD ["node", "dist/server.js"]
