@@ -52,3 +52,5 @@ C2PA is provenance evidence, not a universal deepfake detector. Missing provenan
 ## Status
 
 Production-hardened application code; deployment requires the documented production infrastructure and secrets.
+
+Release gate: dependency lockfile is committed and CI must pass lint, typecheck, tests, build, and production dependency audit before release.
