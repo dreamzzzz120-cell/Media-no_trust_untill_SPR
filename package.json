@@ -1,0 +1,40 @@
+{
+  "name": "spr-media-passport",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Evidence-first media provenance and authenticity verification service.",
+  "type": "module",
+  "engines": { "node": ">=22.22.0 <23" },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "check": "npm run typecheck && npm test && npm run build"
+  },
+  "dependencies": {
+    "@contentauth/c2pa-node": "^0.9.3",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/multipart": "^9.2.1",
+    "@fastify/rate-limit": "^10.2.2",
+    "@fastify/static": "^8.2.0",
+    "@fastify/swagger": "^9.5.1",
+    "@fastify/swagger-ui": "^5.0.1",
+    "fastify": "^5.4.0",
+    "file-type": "^21.0.0",
+    "nanoid": "^5.1.5",
+    "pino": "^9.7.0",
+    "sharp": "^0.34.3",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "eslint": "^9.35.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
