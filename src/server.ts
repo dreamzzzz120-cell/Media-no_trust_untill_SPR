@@ -10,6 +10,7 @@ import { loadConfig } from './config.js';
 import { createStore } from './db.js';
 import { verifyMedia } from './verification/engine.js';
 import { storeUpload } from './storage.js';
+import { scanForMalware } from './security/malware.js';
 import { resolve } from 'node:path';
 
 const config = loadConfig();
@@ -28,7 +29,7 @@ await app.register(fastifyStatic, { root: resolve('public'), prefix: '/' });
 await app.register(swagger, { openapi: { info: { title: 'SPR Media Passport API', version: '0.1.0' }, servers: [{ url: '/' }] } });
 await app.register(swaggerUi, { routePrefix: '/docs' });
 
-const publicPath = (url: string) => url === '/health' || url === '/ready' || url === '/' || url.startsWith('/public/') || url.startsWith('/passport/') || url.startsWith('/app.') || url.startsWith('/styles.');
+const publicPath = (url: string) => url === '/health' || url === '/ready' || url === '/' || url.startsWith('/public/') || url.startsWith('/passport/') || url.startsWith('/app.') || url.startsWith('/styles.') || url.startsWith('/passport.');
 
 app.addHook('onRequest', async (req, reply) => {
   if (publicPath(req.url)) return;
@@ -38,9 +39,7 @@ app.addHook('onRequest', async (req, reply) => {
   if (typeof supplied !== 'string' || !expected) return reply.code(401).send({ error: 'UNAUTHORIZED' });
   const suppliedBuffer = Buffer.from(supplied);
   const expectedBuffer = Buffer.from(expected);
-  if (suppliedBuffer.length !== expectedBuffer.length || !timingSafeEqual(suppliedBuffer, expectedBuffer)) {
-    return reply.code(401).send({ error: 'UNAUTHORIZED' });
-  }
+  if (suppliedBuffer.length !== expectedBuffer.length || !timingSafeEqual(suppliedBuffer, expectedBuffer)) return reply.code(401).send({ error: 'UNAUTHORIZED' });
 });
 
 app.get('/health', async () => ({ status: 'ok', service: 'spr-media-passport' }));
@@ -55,14 +54,16 @@ app.post('/v1/media/verify', async (req, reply) => {
   if (!part) return reply.code(400).send({ error: 'FILE_REQUIRED' });
   const declared = (part.mimetype || 'application/octet-stream').split(';')[0].toLowerCase();
   const upload = await storeUpload(part.file, part.filename, declared, config.UPLOAD_DIR, config.MAX_UPLOAD_BYTES);
-  const asset = { id: upload.id, sha256: upload.sha256, mime: upload.mime, kind: upload.kind, sizeBytes: upload.sizeBytes, originalFilename: upload.originalFilename, createdAt: new Date().toISOString() } as const;
   try {
+    if (!config.MALWARE_SCAN_URL || !config.MALWARE_SCAN_TOKEN) throw new Error('MALWARE_SCANNER_NOT_CONFIGURED');
+    await scanForMalware(upload.path, upload.sizeBytes, upload.mime, config.MALWARE_SCAN_URL, config.MALWARE_SCAN_TOKEN, config.MALWARE_SCAN_TIMEOUT_MS);
+    const asset = { id: upload.id, sha256: upload.sha256, mime: upload.mime, kind: upload.kind, sizeBytes: upload.sizeBytes, originalFilename: upload.originalFilename, createdAt: new Date().toISOString() } as const;
     const record = await verifyMedia(asset, upload.path, { verifyTrust: config.C2PA_VERIFY_TRUST, requireVerification: true });
     await store.save(record);
     return reply.code(201).send({ passportId: asset.id, ...record, publicUrl: `/public/${asset.id}`, verificationUrl: `/passport/${asset.id}` });
   } catch (error) {
-    req.log.error({ err: error, assetId: asset.id }, 'verification failed');
-    return reply.code(503).send({ error: 'VERIFICATION_UNAVAILABLE' });
+    req.log.error({ err: error, assetId: upload.id }, 'verification failed');
+    return reply.code(error instanceof Error && error.message === 'MALWARE_DETECTED' ? 422 : 503).send({ error: error instanceof Error && error.message === 'MALWARE_DETECTED' ? 'MALWARE_DETECTED' : 'VERIFICATION_UNAVAILABLE' });
   }
 });
 
