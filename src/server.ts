@@ -9,7 +9,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { loadConfig } from './config.js';
 import { createStore } from './db.js';
 import { verifyMedia } from './verification/engine.js';
-import { storeUpload } from './storage.js';
+import { deleteStoredMedia, storeUpload } from './storage.js';
 import { scanForMalware } from './security/malware.js';
 import { resolve } from 'node:path';
 
@@ -62,8 +62,10 @@ app.post('/v1/media/verify', async (req, reply) => {
     await store.save(record);
     return reply.code(201).send({ passportId: asset.id, ...record, publicUrl: `/public/${asset.id}`, verificationUrl: `/passport/${asset.id}` });
   } catch (error) {
+    await deleteStoredMedia(upload.path, config.UPLOAD_DIR).catch((cleanupError) => req.log.error({ err: cleanupError, assetId: upload.id }, 'failed to remove quarantined media'));
     req.log.error({ err: error, assetId: upload.id }, 'verification failed');
-    return reply.code(error instanceof Error && error.message === 'MALWARE_DETECTED' ? 422 : 503).send({ error: error instanceof Error && error.message === 'MALWARE_DETECTED' ? 'MALWARE_DETECTED' : 'VERIFICATION_UNAVAILABLE' });
+    const malware = error instanceof Error && error.message === 'MALWARE_DETECTED';
+    return reply.code(malware ? 422 : 503).send({ error: malware ? 'MALWARE_DETECTED' : 'VERIFICATION_UNAVAILABLE' });
   }
 });
 
