@@ -20,7 +20,7 @@ jobs:
           node-version: 22.22.0
           cache: npm
       - name: Install locked dependencies
-        run: npm ci --ignore-scripts
+        run: npm ci --ignore-scripts --no-audit --fund=false
       - name: Audit production dependency tree
         run: npm audit --omit=dev --audit-level=high
       - name: Run release checks
