@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { createWriteStream, createReadStream } from 'node:fs';
 import { mkdir, stat, unlink } from 'node:fs/promises';
-import { pipeline, Transform } from 'node:stream/promises';
+import { Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { join, resolve, basename } from 'node:path';
 import { fileTypeFromFile } from 'file-type';
 import { nanoid } from 'nanoid';
