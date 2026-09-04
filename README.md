@@ -20,9 +20,9 @@ Initial verdict model:
 
 This repository is intentionally independent from the production Software Passport Registry application. Do not add production SPR database credentials, Stripe secrets, or production infrastructure dependencies here.
 
-## Planned pipeline
+## Pipeline
 
-`UPLOAD → FINGERPRINT → PROVENANCE → SIGNAL ANALYSIS → EVIDENCE → VERDICT → MEDIA PASSPORT → POLICY`
+`UPLOAD → FINGERPRINT → MALWARE SCAN → PROVENANCE → SIGNAL ANALYSIS → EVIDENCE → VERDICT → MEDIA PASSPORT → POLICY`
 
 ## Security principles
 
@@ -32,9 +32,23 @@ This repository is intentionally independent from the production Software Passpo
 - fail-closed policy decisions where configured
 - no unsupported certainty claims
 - bounded uploads and strict MIME validation
+- fail-closed malware scanning in production
 - provider failures recorded rather than hidden
-- privacy-conscious retention
+- privacy-conscious public output
+- durable storage is explicitly required for production
+- database readiness is actively probed
+- API-key comparison uses constant-time equality
+
+## Production contract
+
+Production startup requires PostgreSQL, API authentication, confirmed durable upload storage, and a malware scanner endpoint. The malware scanner contract is a POST of the uploaded bytes with the media MIME type and a bearer token; it must return JSON containing a boolean `clean` property. A scanner failure is treated as unavailable and the media is not verified or distributed.
+
+For deployment, apply `db/001_init.sql`, mount encrypted durable storage at `UPLOAD_DIR`, configure the required secrets, and require the CI release gate to pass.
+
+## Important limitation
+
+C2PA is provenance evidence, not a universal deepfake detector. Missing provenance means **UNVERIFIED**, not human-made. Automated mass-distribution blocking should only be enabled after an appropriate security/legal review and platform integration.
 
 ## Status
 
-Foundation build in progress.
+Production-hardened application code; deployment requires the documented production infrastructure and secrets.
