@@ -2,10 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="description" content="SPR Media Passport evidence-first media provenance verification.">
+<link rel="stylesheet" href="/styles.css">
 <title>SPR Media Passport</title>
-<style>body{font-family:system-ui,sans-serif;max-width:900px;margin:48px auto;padding:0 20px}main{border:1px solid #ddd;border-radius:16px;padding:28px}button{padding:12px 18px;border-radius:9px;border:0;cursor:pointer}pre{white-space:pre-wrap;overflow:auto;background:#f6f6f6;padding:16px;border-radius:10px}.status{margin-top:20px;font-weight:700}</style>
 </head>
 <body><main><h1>SPR Media Passport</h1><p>Evidence-first media provenance verification.</p><p><strong>Important:</strong> no detector can prove truth with perfect certainty. Missing AI provenance does not prove human origin.</p>
-<form id="form"><input id="file" type="file" accept="image/*,video/*" required><button>Verify media</button></form><div id="status" class="status"></div><pre id="result"></pre></main>
+<form id="form"><label for="file">Media file</label><input id="file" type="file" accept="image/*,video/*" required><button type="submit">Verify media</button></form><div id="status" class="status" aria-live="polite"></div><pre id="result" aria-live="polite"></pre></main>
 <script src="/app.js" defer></script>
 </body></html>
