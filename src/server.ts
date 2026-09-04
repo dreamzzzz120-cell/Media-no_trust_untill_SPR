@@ -12,13 +12,8 @@ import { storeUpload } from './storage.js';
 import { resolve } from 'node:path';
 
 const config = loadConfig();
-const app = Fastify({
-  logger: { level: config.LOG_LEVEL, redact: ['req.headers.authorization', 'req.headers.x-api-key'] },
-  bodyLimit: config.MAX_UPLOAD_BYTES,
-  trustProxy: false,
-});
+const app = Fastify({ logger: { level: config.LOG_LEVEL, redact: ['req.headers.authorization', 'req.headers.x-api-key'] }, bodyLimit: config.MAX_UPLOAD_BYTES, trustProxy: false });
 const store = createStore(process.env.DATABASE_URL);
-
 await app.register(helmet, { global: true });
 await app.register(rateLimit, { max: config.RATE_LIMIT_MAX, timeWindow: config.RATE_LIMIT_WINDOW_MS });
 await app.register(multipart, { limits: { fileSize: config.MAX_UPLOAD_BYTES, files: 1, fields: 8 } });
@@ -27,7 +22,7 @@ await app.register(swagger, { openapi: { info: { title: 'SPR Media Passport API'
 await app.register(swaggerUi, { routePrefix: '/docs' });
 
 app.addHook('onRequest', async (req, reply) => {
-  if (req.url === '/health' || req.url === '/ready' || req.url.startsWith('/public/') || req.url === '/') return;
+  if (req.url === '/health' || req.url === '/ready' || req.url.startsWith('/public/') || req.url.startsWith('/passport/') || req.url === '/') return;
   if (!config.REQUIRE_API_KEY) return;
   const supplied = req.headers['x-api-key'];
   if (!supplied || supplied !== config.API_KEY) return reply.code(401).send({ error: 'UNAUTHORIZED' });
@@ -47,7 +42,7 @@ app.post('/v1/media/verify', async (req, reply) => {
   const asset = { id: upload.id, sha256: upload.sha256, mime: upload.mime, kind: upload.kind, sizeBytes: upload.sizeBytes, originalFilename: upload.originalFilename, createdAt: new Date().toISOString() } as const;
   const record = await verifyMedia(asset, upload.path, { verifyTrust: config.C2PA_VERIFY_TRUST, requireVerification: true });
   await store.save(record);
-  return reply.code(201).send({ passportId: asset.id, ...record, publicUrl: `/public/${asset.id}` });
+  return reply.code(201).send({ passportId: asset.id, ...record, publicUrl: `/public/${asset.id}`, verificationUrl: `/passport/${asset.id}` });
 });
 
 app.get('/public/:id', async (req, reply) => {
@@ -58,6 +53,16 @@ app.get('/public/:id', async (req, reply) => {
   return { passportId: record.asset.id, asset: { sha256: record.asset.sha256, mime: record.asset.mime, kind: record.asset.kind, sizeBytes: record.asset.sizeBytes }, verdict: record.verdict, distribution: record.distribution, provenance: { status: record.provenance.status, embedded: record.provenance.embedded, trusted: record.provenance.trusted }, evidence: record.observations, limitations: record.limitations };
 });
 
+app.get('/passport/:id', async (req, reply) => {
+  const { id } = req.params as { id: string };
+  if (!/^[A-Za-z0-9_-]{10,40}$/.test(id)) return reply.code(400).type('text/plain').send('Invalid passport ID');
+  const record = await store.get(id);
+  if (!record) return reply.code(404).type('text/plain').send('Passport not found');
+  const esc = (v: unknown) => String(v).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c] ?? c));
+  const evidence = record.observations.map((o) => `<li><strong>${esc(o.signal)}</strong>: ${esc(o.result)} — ${esc(o.details ?? '')}</li>`).join('');
+  return reply.type('text/html').send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>SPR Media Passport ${esc(id)}</title><style>body{font-family:system-ui;max-width:820px;margin:40px auto;padding:0 20px}section{border:1px solid #ddd;border-radius:16px;padding:24px;margin:16px 0}code{word-break:break-all}</style></head><body><h1>SPR Media Passport</h1><section><h2>${esc(record.verdict)}</h2><p>Distribution policy: <strong>${esc(record.distribution)}</strong></p><p>Provenance: ${esc(record.provenance.status)}</p><p>SHA-256: <code>${esc(record.asset.sha256)}</code></p></section><section><h2>Evidence</h2><ul>${evidence}</ul></section><section><h2>Limitations</h2><ul>${record.limitations.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></section></body></html>`);
+});
+
 app.setErrorHandler((error, req, reply) => {
   req.log.error({ err: error }, 'request failed');
   if ((error as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE' || error.message === 'UPLOAD_TOO_LARGE') return reply.code(413).send({ error: 'UPLOAD_TOO_LARGE' });
@@ -65,7 +70,6 @@ app.setErrorHandler((error, req, reply) => {
   if (error.message === 'MIME_MISMATCH') return reply.code(400).send({ error: error.message });
   return reply.code(500).send({ error: 'INTERNAL_ERROR' });
 });
-
 const shutdown = async (signal: string) => { app.log.info({ signal }, 'shutting down'); await app.close(); process.exit(0); };
 process.once('SIGTERM', () => void shutdown('SIGTERM'));
 process.once('SIGINT', () => void shutdown('SIGINT'));
