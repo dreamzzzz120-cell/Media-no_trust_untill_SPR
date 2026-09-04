@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { createReadStream, createWriteStream } from 'node:fs';
+import { createWriteStream, createReadStream } from 'node:fs';
 import { mkdir, stat, unlink } from 'node:fs/promises';
-import { pipeline } from 'node:stream/promises';
+import { pipeline, Transform } from 'node:stream/promises';
 import { join, resolve, basename } from 'node:path';
 import { fileTypeFromFile } from 'file-type';
 import { nanoid } from 'nanoid';
@@ -46,13 +46,10 @@ export async function storeUpload(
 
   const hash = createHash('sha256');
   let bytes = 0;
-  const hashing = new (await import('node:stream')).Transform({
+  const hashing = new Transform({
     transform(chunk, _encoding, callback) {
       bytes += Buffer.byteLength(chunk);
-      if (bytes > maxBytes) {
-        callback(new Error('UPLOAD_TOO_LARGE'));
-        return;
-      }
+      if (bytes > maxBytes) return callback(new Error('UPLOAD_TOO_LARGE'));
       hash.update(chunk);
       callback(null, chunk);
     },
@@ -66,14 +63,19 @@ export async function storeUpload(
     const mime = detected?.mime ?? declaredMime.toLowerCase();
     const kind = classifyMime(mime);
     if (!kind) throw new Error('UNSUPPORTED_MEDIA_TYPE');
-    if (declaredMime && declaredMime !== 'application/octet-stream' && declaredMime.split(';')[0].toLowerCase() !== mime) {
-      throw new Error('MIME_MISMATCH');
-    }
+    if (declaredMime && declaredMime !== 'application/octet-stream' && declaredMime.split(';')[0].toLowerCase() !== mime) throw new Error('MIME_MISMATCH');
     return { id, path, sha256: hash.digest('hex'), sizeBytes: info.size, mime, kind, originalFilename: safeFilename(originalFilename) };
   } catch (error) {
     await unlink(path).catch(() => undefined);
     throw error;
   }
+}
+
+export async function deleteStoredMedia(path: string, root: string): Promise<void> {
+  const resolvedPath = resolve(path);
+  const resolvedRoot = resolve(root);
+  if (!resolvedPath.startsWith(resolvedRoot + '/')) throw new Error('Unsafe storage path');
+  await unlink(resolvedPath).catch(() => undefined);
 }
 
 export function readStream(path: string): NodeJS.ReadableStream {
