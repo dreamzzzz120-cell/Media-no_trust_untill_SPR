@@ -5,7 +5,7 @@
   "description": "Evidence-first media provenance and authenticity verification service.",
   "type": "module",
   "engines": { "node": ">=22.22.0 <23" },
-  "scripts": { "dev": "tsx watch src/server.ts", "build": "tsc -p tsconfig.json", "start": "node dist/server.js", "test": "vitest run", "test:watch": "vitest", "lint": "eslint .", "typecheck": "tsc --noEmit -p tsconfig.json", "check": "npm run typecheck && npm test && npm run build" },
+  "scripts": { "dev": "tsx watch src/server.ts", "build": "tsc -p tsconfig.json", "start": "node dist/server.js", "test": "vitest run", "test:watch": "vitest", "lint": "eslint .", "typecheck": "tsc --noEmit -p tsconfig.json", "check": "npm run lint && npm run typecheck && npm test && npm run build" },
   "dependencies": {
     "@contentauth/c2pa-node": "0.9.3",
     "@fastify/helmet": "13.0.2",
