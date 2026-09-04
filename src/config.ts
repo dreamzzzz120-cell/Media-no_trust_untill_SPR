@@ -36,5 +36,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (c.NODE_ENV === 'production' && !c.PERSISTENT_STORAGE_CONFIRMED) throw new Error('PERSISTENT_STORAGE_CONFIRMED=true is required in production');
   if (c.NODE_ENV === 'production' && !c.MALWARE_SCAN_URL) throw new Error('MALWARE_SCAN_URL is required in production');
   if (c.MALWARE_SCAN_URL && !c.MALWARE_SCAN_TOKEN) throw new Error('MALWARE_SCAN_TOKEN is required when MALWARE_SCAN_URL is configured');
+  if (c.NODE_ENV === 'production' && c.MALWARE_SCAN_URL && new URL(c.MALWARE_SCAN_URL).protocol !== 'https:') throw new Error('MALWARE_SCAN_URL must use HTTPS in production');
   return c;
 }
