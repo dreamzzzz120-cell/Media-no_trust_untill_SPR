@@ -14,9 +14,9 @@ RUN npm run build
 FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production
 ENV PORT=8080
-ENV UPLOAD_DIR=/data/uploads
+ENV UPLOAD_DIR=/tmp/spr-media-uploads
 WORKDIR /app
-RUN useradd --system --uid 10001 appuser && mkdir -p /data/uploads && chown -R appuser:appuser /data /app
+RUN useradd --system --uid 10001 appuser && mkdir -p /tmp/spr-media-uploads && chown -R appuser:appuser /tmp/spr-media-uploads /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY db ./db
@@ -24,5 +24,4 @@ COPY public ./public
 COPY package.json ./
 USER appuser
 EXPOSE 8080
-VOLUME ["/data"]
 CMD ["node", "dist/server.js"]
