@@ -60,6 +60,7 @@ app.post('/v1/media/verify', async (req, reply) => {
     const asset = { id: upload.id, sha256: upload.sha256, mime: upload.mime, kind: upload.kind, sizeBytes: upload.sizeBytes, originalFilename: upload.originalFilename, createdAt: new Date().toISOString() } as const;
     const record = await verifyMedia(asset, upload.path, { verifyTrust: config.C2PA_VERIFY_TRUST, requireVerification: true });
     await store.save(record);
+    if (config.DELETE_SOURCE_AFTER_VERIFICATION) await deleteStoredMedia(upload.path, config.UPLOAD_DIR);
     return reply.code(201).send({ passportId: asset.id, ...record, publicUrl: `/public/${asset.id}`, verificationUrl: `/passport/${asset.id}` });
   } catch (error) {
     await deleteStoredMedia(upload.path, config.UPLOAD_DIR).catch((cleanupError) => req.log.error({ err: cleanupError, assetId: upload.id }, 'failed to remove quarantined media'));
