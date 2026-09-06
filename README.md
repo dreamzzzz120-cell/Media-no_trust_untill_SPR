@@ -1,56 +1,66 @@
-# SPR Media Passport
+# Media Passport
 
-**No trust until SPR.**
+**Evidence before amplification.**
 
-An isolated evidence-first media provenance and authenticity verification service.
+Media Passport is an evidence-first media provenance and trust assessment service. It supports video, images and audio intake today and defines a common trust model for additional media types.
 
-## Product goal
+## Product principle
 
-SPR Media Passport analyzes images and video and produces an evidence-backed verification record. It does **not** claim that absence of an AI signal proves human origin.
+> We don't decide what you're allowed to believe. We show you what the evidence says about how content was made, where it came from, and how confidently it can be verified.
 
-Initial verdict model:
+The system does not claim objective truth, legal ownership, copyright infringement, identity certainty, or regulatory certification.
 
-- `AI_VERIFIED` — supported synthetic-generation provenance/signals verified
-- `HUMAN_ORIGIN_VERIFIED` — supported capture/provenance evidence verified
-- `UNVERIFIED` — insufficient trustworthy evidence
-- `REVIEW` — conflicting or suspicious evidence requires review
-- `BLOCK` — policy engine determines distribution should be blocked
+## Trust Vector
 
-## Architecture boundary
+1. Provenance
+2. Authenticity
+3. AI Transparency
+4. Source Quality
+5. Claim Integrity
+6. Manipulation Risk
+7. Originality
+8. Copyright Risk
+9. Creator Trust
+10. Spam Risk
+11. Human Contribution
+12. Evidence Quality
 
-This repository is intentionally independent from the production Software Passport Registry application. Do not add production SPR database credentials, Stripe secrets, or production infrastructure dependencies here.
+Scores remain evidence-backed and confidence-aware. Missing evidence does not become certainty.
 
 ## Pipeline
 
-`UPLOAD → FINGERPRINT → MALWARE SCAN → PROVENANCE → SIGNAL ANALYSIS → EVIDENCE → VERDICT → MEDIA PASSPORT → POLICY`
+`UPLOAD → QUARANTINE → MALWARE SCAN → FILE VALIDATION → HASH → C2PA/PROVENANCE → SIGNAL PROVIDERS → EVIDENCE → TRUST VECTOR → DECISION → PASSPORT`
 
-## Security principles
+## API
 
-- SHA-256 content fingerprinting
-- immutable verification observations
-- explicit evidence provenance
-- fail-closed policy decisions where configured
-- no unsupported certainty claims
-- bounded uploads and strict MIME validation
-- fail-closed malware scanning in production
-- provider failures recorded rather than hidden
-- privacy-conscious public output
-- source media is deleted after successful verification in production
-- database readiness is actively probed
-- API-key comparison uses constant-time equality
+- `POST /v1/media/verify`
+- `GET /v1/media/:id`
+- `GET /v1/media/:id/evidence`
+- `GET /v1/media/:id/provenance`
+- `GET /v1/media/:id/trust`
+- `GET /v1/media/:id/claims`
+- `POST /v1/media/:id/appeal`
+- `POST /v1/media/:id/report`
+- `POST /v1/recommendation/evaluate`
+- `POST /v1/api-keys`
+- `GET /health`
+- `GET /ready`
+- `GET /docs`
 
-## Production contract
+## Security
 
-Production startup requires PostgreSQL, API authentication, source-media cleanup, and a malware scanner endpoint. Uploaded source bytes are treated as ephemeral processing material; the verification record is persisted in PostgreSQL and the source file is deleted after a successful verification. The malware scanner contract is a POST of the uploaded bytes with the media MIME type and a bearer token; it must return JSON containing a boolean `clean` property. A scanner failure is treated as unavailable and the media is not verified or distributed.
+Uploaded media is hostile input. Production requires malware scanning, strict MIME/file-signature validation, upload limits, secure temporary storage, authenticated API access, RBAC, hashed API keys, security headers, rate limiting, and privacy-minimized public output.
 
-The production deployment runs the idempotent database migration before the application starts. Configure the required secrets and require the CI release gate to pass.
+## Evidence governance
 
-## Important limitation
+Every persisted Trust Observation records content hash, model name/version, confidence, timestamp and policy version. C2PA is treated as signed provenance evidence rather than a universal deepfake detector. AI involvement is separated from deception, and creator disclosure is evaluated independently.
 
-C2PA is provenance evidence, not a universal deepfake detector. Missing provenance means **UNVERIFIED**, not human-made. Automated mass-distribution blocking should only be enabled after an appropriate security/legal review and platform integration.
+## Data model
 
-## Status
+Migration `002_media_passport.sql` adds organizations, creators, media assets, Passports, immutable Trust Observations, evidence, provenance manifests, claims, reviews, appeals, reports, audit logs, API keys, webhook subscriptions and versioned policies. Migration `003_legacy_media_kind.sql` expands the original verification table for additional media kinds.
 
-Production-hardened application code; operational release still requires a real malware-scanner endpoint and production secrets/configuration.
+## Release gate
 
-Release gate: dependency lockfile is committed and CI must pass lint, typecheck, tests, build, and production dependency audit before release.
+`npm run check` must pass lint, typecheck, tests and build. CI also checks lockfile integrity and production dependency vulnerabilities.
+
+The repository contains the production application foundation, but a real production release still requires deployment-specific credentials and infrastructure verification that cannot be fabricated in Git: PostgreSQL persistence, malware scanner, persistent object storage/ephemeral deletion behavior, any selected AI/source-analysis providers, authenticated tenant-isolation tests, and an executed backup/restore drill.

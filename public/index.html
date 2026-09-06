@@ -1,13 +1,7 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="referrer" content="no-referrer">
-<meta name="description" content="SPR Media Passport evidence-first media provenance verification.">
-<link rel="stylesheet" href="/styles.css">
-<title>SPR Media Passport</title>
-</head>
-<body><main><h1>SPR Media Passport</h1><p>Evidence-first media provenance verification.</p><p><strong>Important:</strong> no detector can prove truth with perfect certainty. Missing AI provenance does not prove human origin.</p>
-<form id="form"><label for="file">Media file</label><input id="file" type="file" accept="image/*,video/*" required><button type="submit">Verify media</button></form><div id="status" class="status" aria-live="polite"></div><pre id="result" aria-live="polite"></pre></main>
-<script src="/app.js" defer></script>
-</body></html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="description" content="Media Passport — evidence-based provenance and media trust assessment."><link rel="stylesheet" href="/styles.css"><title>Media Passport — Evidence Before Amplification</title></head>
+<body><main><header><p class="eyebrow">TRUST PASSPORT NETWORK</p><h1>Media Passport</h1><p class="lead">Evidence before amplification. Understand where media came from, how it was made, and what the available evidence supports.</p></header>
+<section><h2>Trust infrastructure</h2><div class="grid"><article><strong>Provenance</strong><p>C2PA / Content Credentials, hashes and chain-of-custody signals.</p></article><article><strong>AI transparency</strong><p>AI involvement and disclosure consistency — without treating AI as inherently bad.</p></article><article><strong>Evidence</strong><p>Source, manipulation, originality and risk signals with confidence and limitations.</p></article><article><strong>Explainability</strong><p>Every Passport exposes the evidence behind its assessment.</p></article></div></section>
+<section><h2>Verify media</h2><p class="notice">The production API requires an API key. Keys are never stored by this page.</p><form id="form"><label for="key">API key</label><input id="key" type="password" autocomplete="off" minlength="32" required><label for="file">Media file</label><input id="file" type="file" accept="image/*,video/*,audio/*" required><label for="ai">Declared AI use</label><select id="ai"><option>UNKNOWN</option><option>NONE</option><option>AI_ASSISTED</option><option>AI_EDITED</option><option>AI_GENERATED</option><option>AI_SYNTHETIC_PERSON</option><option>AI_SYNTHETIC_VOICE</option><option>AI_DEEPFAKE</option></select><button type="submit">Create Media Passport</button></form><div id="status" class="status" aria-live="polite"></div><pre id="result" aria-live="polite"></pre></section>
+<footer><a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a> · <a href="/docs">API Docs</a></footer><script src="/app.js" defer></script></main></body></html>

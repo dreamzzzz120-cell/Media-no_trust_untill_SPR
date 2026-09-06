@@ -10,6 +10,7 @@ import type { MediaKind } from './domain/media.js';
 
 const ALLOWED_IMAGE = new Set(['image/jpeg','image/png','image/webp','image/gif','image/avif','image/heic','image/heif']);
 const ALLOWED_VIDEO = new Set(['video/mp4','video/webm','video/quicktime','video/x-matroska']);
+const ALLOWED_AUDIO = new Set(['audio/mpeg','audio/wav','audio/wave','audio/x-wav','audio/ogg','audio/flac','audio/mp4','audio/aac','audio/webm']);
 
 export interface StoredMedia {
   id: string;
@@ -24,6 +25,7 @@ export interface StoredMedia {
 export function classifyMime(mime: string): MediaKind | null {
   if (ALLOWED_IMAGE.has(mime)) return 'image';
   if (ALLOWED_VIDEO.has(mime)) return 'video';
+  if (ALLOWED_AUDIO.has(mime)) return 'audio';
   return null;
 }
 
