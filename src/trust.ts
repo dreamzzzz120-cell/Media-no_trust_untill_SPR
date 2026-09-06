@@ -40,8 +40,12 @@ function observationsScore(observations: EvidenceObservation[], pattern: RegExp,
   return Math.round(Math.max(0, Math.min(100, (base / matching.reduce((s,o) => s + (o.confidence ?? 0), 0)) * 100)));
 }
 
+const riskDimensions = new Set(['manipulationRisk', 'copyrightRisk', 'spamRisk']);
+
 export function calculateTrustScore(vector: TrustVector): number | null {
-  const values = dimensions.map(d => vector[d]).filter((v): v is number => typeof v === 'number');
+  const values = dimensions
+    .map(d => { const v = vector[d]; return typeof v === 'number' ? (riskDimensions.has(d) ? 100 - v : v) : null; })
+    .filter((v): v is number => typeof v === 'number');
   return values.length ? Math.round(values.reduce((a,b) => a + b, 0) / values.length) : null;
 }
 
