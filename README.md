@@ -35,15 +35,15 @@ This repository is intentionally independent from the production Software Passpo
 - fail-closed malware scanning in production
 - provider failures recorded rather than hidden
 - privacy-conscious public output
-- durable storage is explicitly required for production
+- source media is deleted after successful verification in production
 - database readiness is actively probed
 - API-key comparison uses constant-time equality
 
 ## Production contract
 
-Production startup requires PostgreSQL, API authentication, confirmed durable upload storage, and a malware scanner endpoint. The malware scanner contract is a POST of the uploaded bytes with the media MIME type and a bearer token; it must return JSON containing a boolean `clean` property. A scanner failure is treated as unavailable and the media is not verified or distributed.
+Production startup requires PostgreSQL, API authentication, source-media cleanup, and a malware scanner endpoint. Uploaded source bytes are treated as ephemeral processing material; the verification record is persisted in PostgreSQL and the source file is deleted after a successful verification. The malware scanner contract is a POST of the uploaded bytes with the media MIME type and a bearer token; it must return JSON containing a boolean `clean` property. A scanner failure is treated as unavailable and the media is not verified or distributed.
 
-For deployment, apply `db/001_init.sql`, mount encrypted durable storage at `UPLOAD_DIR`, configure the required secrets, and require the CI release gate to pass.
+The production deployment runs the idempotent database migration before the application starts. Configure the required secrets and require the CI release gate to pass.
 
 ## Important limitation
 
@@ -51,6 +51,6 @@ C2PA is provenance evidence, not a universal deepfake detector. Missing provenan
 
 ## Status
 
-Production-hardened application code; deployment requires the documented production infrastructure and secrets.
+Production-hardened application code; operational release still requires a real malware-scanner endpoint and production secrets/configuration.
 
 Release gate: dependency lockfile is committed and CI must pass lint, typecheck, tests, build, and production dependency audit before release.
