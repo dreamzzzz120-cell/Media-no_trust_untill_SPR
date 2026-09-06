@@ -3,7 +3,6 @@ CREATE TABLE IF NOT EXISTS organizations (
   name TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS creators (
   id TEXT PRIMARY KEY,
   organization_id TEXT REFERENCES organizations(id) ON DELETE CASCADE,
@@ -12,7 +11,6 @@ CREATE TABLE IF NOT EXISTS creators (
   trust_score NUMERIC(5,2),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS media_assets (
   id TEXT PRIMARY KEY,
   organization_id TEXT REFERENCES organizations(id) ON DELETE SET NULL,
@@ -25,10 +23,10 @@ CREATE TABLE IF NOT EXISTS media_assets (
   kind TEXT NOT NULL CHECK (kind IN ('image','video','audio','article','text','podcast','livestream','document','social_post','news_report','advertisement')),
   size_bytes BIGINT NOT NULL CHECK (size_bytes > 0),
   original_filename TEXT NOT NULL,
-  declared_ai_use TEXT NOT NULL DEFAULT 'unknown' CHECK (declared_ai_use IN ('none','assisted','edited','generated','synthetic_person','synthetic_voice','deepfake','unknown')),
+  declared_ai_use TEXT NOT NULL DEFAULT 'unknown' CHECK (declared_ai_use IN ('NONE','AI_ASSISTED','AI_EDITED','AI_GENERATED','AI_SYNTHETIC_PERSON','AI_SYNTHETIC_VOICE','AI_DEEPFAKE','UNKNOWN')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
+CREATE INDEX IF NOT EXISTS media_assets_sha256_idx ON media_assets(sha256);
 CREATE TABLE IF NOT EXISTS media_passports (
   id TEXT PRIMARY KEY,
   asset_id TEXT NOT NULL UNIQUE REFERENCES media_assets(id) ON DELETE CASCADE,
@@ -39,7 +37,6 @@ CREATE TABLE IF NOT EXISTS media_passports (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS trust_observations (
   id TEXT PRIMARY KEY,
   passport_id TEXT NOT NULL REFERENCES media_passports(id) ON DELETE CASCADE,
@@ -55,7 +52,6 @@ CREATE TABLE IF NOT EXISTS trust_observations (
   expires_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS trust_observations_passport_idx ON trust_observations(passport_id, observed_at DESC);
-
 CREATE TABLE IF NOT EXISTS evidence (
   id TEXT PRIMARY KEY,
   passport_id TEXT NOT NULL REFERENCES media_passports(id) ON DELETE CASCADE,
@@ -71,7 +67,6 @@ CREATE TABLE IF NOT EXISTS evidence (
   expires_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS evidence_passport_idx ON evidence(passport_id, created_at DESC);
-
 CREATE TABLE IF NOT EXISTS provenance_manifests (
   id TEXT PRIMARY KEY,
   passport_id TEXT NOT NULL REFERENCES media_passports(id) ON DELETE CASCADE,
@@ -81,7 +76,6 @@ CREATE TABLE IF NOT EXISTS provenance_manifests (
   assertions JSONB NOT NULL DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS claims (
   id TEXT PRIMARY KEY,
   passport_id TEXT NOT NULL REFERENCES media_passports(id) ON DELETE CASCADE,
@@ -90,7 +84,6 @@ CREATE TABLE IF NOT EXISTS claims (
   confidence NUMERIC(5,4),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS reviews (
   id TEXT PRIMARY KEY,
   passport_id TEXT NOT NULL REFERENCES media_passports(id) ON DELETE CASCADE,
@@ -102,7 +95,6 @@ CREATE TABLE IF NOT EXISTS reviews (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   completed_at TIMESTAMPTZ
 );
-
 CREATE TABLE IF NOT EXISTS appeals (
   id TEXT PRIMARY KEY,
   passport_id TEXT NOT NULL REFERENCES media_passports(id) ON DELETE CASCADE,
@@ -113,7 +105,6 @@ CREATE TABLE IF NOT EXISTS appeals (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   resolved_at TIMESTAMPTZ
 );
-
 CREATE TABLE IF NOT EXISTS reports (
   id TEXT PRIMARY KEY,
   passport_id TEXT NOT NULL REFERENCES media_passports(id) ON DELETE CASCADE,
@@ -122,7 +113,6 @@ CREATE TABLE IF NOT EXISTS reports (
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','reviewing','resolved','dismissed')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS audit_logs (
   id TEXT PRIMARY KEY,
   organization_id TEXT,
@@ -134,7 +124,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS audit_logs_resource_idx ON audit_logs(resource_type, resource_id, created_at DESC);
-
 CREATE TABLE IF NOT EXISTS api_keys (
   id TEXT PRIMARY KEY,
   organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -145,7 +134,6 @@ CREATE TABLE IF NOT EXISTS api_keys (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_used_at TIMESTAMPTZ
 );
-
 CREATE TABLE IF NOT EXISTS webhook_subscriptions (
   id TEXT PRIMARY KEY,
   organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -155,7 +143,6 @@ CREATE TABLE IF NOT EXISTS webhook_subscriptions (
   active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS policy_versions (
   id TEXT PRIMARY KEY,
   jurisdiction TEXT NOT NULL,
@@ -165,9 +152,3 @@ CREATE TABLE IF NOT EXISTS policy_versions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(jurisdiction, version)
 );
-
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_assets_sha256_unique') THEN
-    ALTER TABLE media_assets ADD CONSTRAINT media_assets_sha256_unique UNIQUE (sha256);
-  END IF;
-END $$;
