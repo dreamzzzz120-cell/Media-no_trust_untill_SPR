@@ -1,38 +1,40 @@
 name: CI
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
 permissions:
-  contents: write
+  contents: read
+
 concurrency:
-  group: spr-media-passport-ci-${{ github.ref }}
+  group: spr-media-passport-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
         with:
           node-version: 22.22.0
           cache: npm
-      - name: Synchronize lockfile on main
-        if: ${{ github.event_name == 'push' }}
-        run: |
-          rm -f package-lock.json
-          npm install --package-lock-only --ignore-scripts --no-audit --fund=false
-          git add package-lock.json
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'chore: synchronize npm lockfile'
-          git push
-          exit 0
+
+      - name: Verify lockfile is in sync
+        run: npm install --package-lock-only --ignore-scripts --no-audit --fund=false && git diff --exit-code -- package-lock.json
+
       - name: Install locked dependencies
         run: npm ci --ignore-scripts --no-audit --fund=false
+
       - name: Audit production dependency tree
         run: npm audit --omit=dev --audit-level=high
+
       - name: Run release checks
         run: npm run check
