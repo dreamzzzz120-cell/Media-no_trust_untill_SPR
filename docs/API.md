@@ -1,29 +1,49 @@
-# API
+# Media Passport API
 
-## `POST /v1/media/verify`
+All `/v1/*` routes require `x-api-key` in production. API keys are stored as SHA-256 hashes and have a role and organization scope.
 
-Authenticated with `x-api-key` when API-key enforcement is enabled. Accepts exactly one multipart file named `file`.
+## Authentication / administration
 
-Returns a Media Passport record containing:
+`POST /v1/api-keys` — create a scoped API key. Requires organization admin or higher. The returned secret is shown once.
 
-- SHA-256 fingerprint
-- detected MIME type and media kind
-- C2PA provenance state
-- evidence observations
-- conservative verdict
-- distribution action
-- verification limitations
+Roles: `viewer`, `creator`, `reviewer`, `moderator`, `analyst`, `organization_admin`, `platform_admin`, `super_admin`.
 
-## `GET /public/:id`
+## Media
 
-Returns a public, privacy-minimized verification representation. It does not return the original media bytes.
+`POST /v1/media/verify` — multipart upload with field `file`. Optional headers: `x-declared-ai-use`, `x-creator-id`.
+
+`GET /v1/media/:id` — complete Passport assessment.
+
+`GET /v1/media/:id/evidence` — evidence observations and evidence quality.
+
+`GET /v1/media/:id/provenance` — C2PA/provenance state.
+
+`GET /v1/media/:id/trust` — Trust Vector, score, confidence and decision.
+
+`GET /v1/media/:id/claims` — claim-analysis status. No claims are fabricated when no source-analysis provider is configured.
+
+## Cases
+
+`POST /v1/media/:id/appeal` — submit an appeal for human review.
+
+`POST /v1/media/:id/report` — report impersonation, copyright, privacy, deception, spam or other concerns.
+
+## Platform recommendation
+
+`POST /v1/recommendation/evaluate` — evaluates a Passport against explicit trust/provenance/disclosure criteria and returns explainability data. This endpoint does not itself publish or suppress content.
+
+## Public verification
+
+`GET /public/:id` returns a privacy-minimized Passport representation. It never serves original media bytes.
+
+`GET /passport/:id` renders a human-readable Passport page with trust vector, evidence and limitations.
 
 ## Health
 
 - `GET /health` — liveness
 - `GET /ready` — readiness
-- `/docs` — OpenAPI UI
+- `GET /docs` — OpenAPI UI
 
-## Distribution semantics
+## Decision semantics
 
-`ALLOW` means the configured evidence supports the policy. `LABEL` means content should be visibly identified. `REVIEW` means automated publication should wait for review. `BLOCK` means automated distribution should be denied.
+`PROMOTE` = candidate for preferential distribution; `TRUST` = trust threshold met; `REVIEW` = human/enhanced review required; `SUPPRESS` = do not recommend until relevant risk is resolved. `REMOVE` is intentionally not an automated Media Passport decision.
