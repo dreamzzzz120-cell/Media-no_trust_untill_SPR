@@ -26,6 +26,7 @@ beforeAll(async () => {
 afterAll(() => { app?.kill('SIGTERM'); });
 it('registers, records, rejects forgery and cross-tenant access, then shows a verified contradiction', async () => {
  const page = await fetch(url + '/ai.html'); expect(page.status).toBe(200); expect(await page.text()).toContain('AI flight recorder');
+ expect((await fetch(url + '/?utm_source=review')).status).toBe(200);
  const aiReady = await fetch(url + '/ready/ai'); expect(aiReady.status).toBe(200); expect((await aiReady.json()).scope).toBe('ai_registry_and_event_api');
  const system = await request('/v1/ai', keyA, { name:'Refund agent', purpose:'Customer support' }); expect(system.status).toBe(201);
  const id=system.body.id as string;
