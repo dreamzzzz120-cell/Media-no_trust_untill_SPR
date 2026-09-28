@@ -1,4 +1,6 @@
 const $ = selector => document.querySelector(selector);
+let nextCursor = null; let historyExpanded = false;
+function renderEvents(events) { for (const item of events) { const li = document.createElement('li'); li.textContent = `${item.statement} State: ${item.state}. Event: ${item.id}${item.relatedEventId ? `. Related claim: ${item.relatedEventId}` : ''}`; $('#timeline').append(li); } }
 const key = () => $('#key').value;
 const id = () => $('#ai').value.trim();
 const status = message => { $('#status').textContent = message; };
@@ -17,10 +19,11 @@ async function refresh() {
  const note = document.createElement('p'); note.textContent = `Purpose: ${system.purpose}. Monitoring: ${system.monitoringStatus}. Compliance: ${system.compliance.state} — ${system.compliance.reason}`; $('#detail').append(note);
  for (const source of coverage.sources) { const li = document.createElement('li'); li.className = 'coverage'; li.textContent = `${source.name}: ${source.state}${source.reason ? ` — ${source.reason}` : ''}`; $('#coverage').append(li); }
  for (const alert of alerts.alerts) { const row = document.createElement('article'); row.className = 'critical'; row.textContent = `${alert.severity} · ${alert.createdAt} · ${alert.summary} · Claim ${alert.claimEventId} → result ${alert.resultEventId}`; $('#alerts').append(row); }
- for (const item of history.events) { const li = document.createElement('li'); li.textContent = `${item.statement} State: ${item.state}. Event: ${item.id}${item.relatedEventId ? `. Related claim: ${item.relatedEventId}` : ''}`; $('#timeline').append(li); }
+ renderEvents(history.events); nextCursor = history.nextCursor; $('#more').hidden = !history.hasMore; historyExpanded = false;
  $('#activity').hidden = false;
  status(`${history.events.length} recorded events, ${alerts.alerts.length} critical contradictions. Coverage is limited to the connected sources shown above.`);
 }
+$('#more').addEventListener('click', async () => { if (nextCursor === null) return; try { const page = await api(`/v1/ai/${encodeURIComponent(id())}/timeline?afterSequence=${nextCursor}`); renderEvents(page.events); nextCursor = page.nextCursor; $('#more').hidden = !page.hasMore; historyExpanded = true; status(`${$('#timeline').children.length} events loaded in ingestion order${page.hasMore ? '; more history available' : ''}.`); } catch (error) { status(error.message); } });
 $('#lookup').addEventListener('submit', async event => { event.preventDefault(); try { await refresh(); } catch (error) { status(error.message); } });
 $('#register').addEventListener('submit', async event => {
  event.preventDefault();
@@ -38,4 +41,4 @@ $('#report').addEventListener('submit', async event => {
  } catch (error) { status(error.message); }
 });
 
-setInterval(() => { if (id() && key() && !document.hidden) refresh().catch(error => status(error.message)); }, 5000);
+setInterval(() => { if (id() && key() && !document.hidden && !historyExpanded && nextCursor === null) refresh().catch(error => status(error.message)); }, 5000);
