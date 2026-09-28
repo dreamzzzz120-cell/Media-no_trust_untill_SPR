@@ -1,5 +1,9 @@
 # Media Passport
 
+## AI flight recorder MVP
+
+The tenant-scoped AI activity and evidence API extends the media pipeline. Open `/ai.html` to register an AI, report declared events, and inspect a human-readable timeline, visibility gaps, and critical contradictions. Authenticated action-result ingestion is available when a trusted execution gateway is configured. See [the integration contract](docs/ai-flight-recorder-slice.md) for the API, evidence boundaries, and setup.
+
 **Evidence before amplification.**
 
 Media Passport is an independent **identity + evidence layer for digital media**. It supports video, images and audio intake today and defines a common trust model for additional media types.
