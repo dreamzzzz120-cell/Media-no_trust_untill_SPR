@@ -26,6 +26,7 @@ beforeAll(async () => {
 afterAll(() => { app?.kill('SIGTERM'); });
 it('registers, records, rejects forgery and cross-tenant access, then shows a verified contradiction', async () => {
  const page = await fetch(url + '/ai.html'); expect(page.status).toBe(200); expect(await page.text()).toContain('AI flight recorder');
+ const aiReady = await fetch(url + '/ready/ai'); expect(aiReady.status).toBe(200); expect((await aiReady.json()).scope).toBe('ai_registry_and_event_api');
  const system = await request('/v1/ai', keyA, { name:'Refund agent', purpose:'Customer support' }); expect(system.status).toBe(201);
  const id=system.body.id as string;
  expect((await request(`/v1/ai/${id}`, keyB)).status).toBe(404);
@@ -33,6 +34,7 @@ it('registers, records, rejects forgery and cross-tenant access, then shows a ve
  const claim = await request(`/v1/ai/${id}/events`, keyA, { eventType:'OUTPUT', sourceType:'DECLARATION', source:'agent wrapper', summary:'Refund completed', occurredAt:'2026-09-28T20:00:00Z', evidenceHash:createHash('sha256').update('Refund completed').digest('hex') });
  expect(claim.status).toBe(201); expect(claim.body.state).toBe('DECLARED');
  const spoofed = await request(`/v1/ai/${id}/events`, keyA, { eventType:'ACTION_CONFIRMED', sourceType:'AUTHORITATIVE_SYSTEM', source:'fake', summary:'confirmed', occurredAt:'2026-09-28T20:00:01Z', evidenceHash:'a'.repeat(64) }); expect(spoofed.status).toBe(400);
+ const declaredConfirmation = await request(`/v1/ai/${id}/events`, keyA, { eventType:'ACTION_CONFIRMED', sourceType:'DECLARATION', source:'agent wrapper', summary:'confirmed', occurredAt:'2026-09-28T20:00:01Z', evidenceHash:'a'.repeat(64) }); expect(declaredConfirmation.status).toBe(400);
  const body = { organizationId:orgA, aiId:id, claimEventId:claim.body.id, outcome:'FAILED', source:'payment-gateway', occurredAt:'2026-09-28T20:00:02Z', evidenceHash:'f'.repeat(64), externalEventId:'failure-1' };
  const endpoint='/v1/integrations/action-confirmations';
  expect((await request(endpoint, null, body)).status).toBe(401);
