@@ -29,7 +29,7 @@ await app.register(multipart, { limits: { fileSize: config.MAX_UPLOAD_BYTES, fil
 await app.register(fastifyStatic, { root: resolve('public'), prefix: '/' });
 await app.register(swagger, { openapi: { info: { title: 'Media Passport API', version: '1.0.0' }, servers: [{ url: '/' }], tags: [{ name: 'media' }, { name: 'passport' }, { name: 'trust' }, { name: 'cases' }, { name: 'admin' }] } });
 await app.register(swaggerUi, { routePrefix: '/docs' });
-const publicPath = (url: string) => url === '/health' || url === '/ready' || url === '/ready/ai' || url === '/' || url === '/v1/integrations/action-confirmations' || url.startsWith('/public/') || url.startsWith('/passport/') || url.startsWith('/app.') || url.startsWith('/styles.') || url.startsWith('/passport.') || url === '/ai.html' || url === '/ai.js' || url === '/docs' || url.startsWith('/docs/');
+const publicPath = (url: string) => { const path = new URL(url, 'http://localhost').pathname; return path === '/health' || path === '/ready' || path === '/ready/ai' || path === '/' || path === '/v1/integrations/action-confirmations' || path.startsWith('/public/') || path.startsWith('/passport/') || path.startsWith('/app.') || path.startsWith('/styles.') || path.startsWith('/passport.') || path === '/ai.html' || path === '/ai.js' || path === '/docs' || path.startsWith('/docs/'); };
 app.decorateRequest('mediaAuth', null);
 app.addHook('onRequest', async (req, reply) => {
   if (publicPath(req.url) || !config.REQUIRE_API_KEY) return;
@@ -53,7 +53,7 @@ app.get('/ready', async (_req, reply) => {
   return { status: 'ready', database: { ok: true }, scanner: { ok: scannerOk }, trustEngine: { ok: true } };
 });
 app.get('/ready/ai', async (_req, reply) => {
- const databaseOk = await store.ready();
+ const databaseOk = await aiStore.ready();
  return reply.code(databaseOk ? 200 : 503).send({ status: databaseOk ? 'ready' : 'not_ready', scope: 'ai_registry_and_event_api', database: { ok: databaseOk }, mediaScanning: { status: 'NOT_ASSESSED', note: 'Use /ready for the media upload and malware scanner pipeline.' } });
 });
 app.post('/v1/organizations', async (req, reply) => { if (!requireRole(req, reply, ['super_admin','platform_admin'])) return; const body = z.object({ name: z.string().trim().min(2).max(120) }).parse(req.body); const created = await store.createOrganization(body.name); return reply.code(201).send(created); });
