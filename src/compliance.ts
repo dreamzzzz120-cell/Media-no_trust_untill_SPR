@@ -6,10 +6,10 @@ export type ComplianceStatus = 'COMPLIANT' | 'ACTION_REQUIRED' | 'NOT_APPLICABLE
 export interface DisclosureContext {
   jurisdiction: ComplianceJurisdiction;
   actor: 'provider' | 'deployer';
-  publicInterest?: boolean;
-  humanReviewed?: boolean;
-  editorialResponsibility?: boolean;
-  creativeSatiricalFictional?: boolean;
+  publicInterest?: boolean | undefined;
+  humanReviewed?: boolean | undefined;
+  editorialResponsibility?: boolean | undefined;
+  creativeSatiricalFictional?: boolean | undefined;
 }
 export interface ComplianceAssessment {
   schemaVersion: '1.0';
