@@ -29,7 +29,7 @@ await app.register(multipart, { limits: { fileSize: config.MAX_UPLOAD_BYTES, fil
 await app.register(fastifyStatic, { root: resolve('public'), prefix: '/' });
 await app.register(swagger, { openapi: { info: { title: 'Media Passport API', version: '1.0.0' }, servers: [{ url: '/' }], tags: [{ name: 'media' }, { name: 'passport' }, { name: 'trust' }, { name: 'cases' }, { name: 'admin' }] } });
 await app.register(swaggerUi, { routePrefix: '/docs' });
-const publicPath = (url: string) => url === '/health' || url === '/ready' || url === '/' || url === '/v1/integrations/action-confirmations' || url.startsWith('/public/') || url.startsWith('/passport/') || url.startsWith('/app.') || url.startsWith('/styles.') || url.startsWith('/passport.') || url === '/ai.html' || url === '/ai.js' || url === '/docs' || url.startsWith('/docs/');
+const publicPath = (url: string) => url === '/health' || url === '/ready' || url === '/ready/ai' || url === '/' || url === '/v1/integrations/action-confirmations' || url.startsWith('/public/') || url.startsWith('/passport/') || url.startsWith('/app.') || url.startsWith('/styles.') || url.startsWith('/passport.') || url === '/ai.html' || url === '/ai.js' || url === '/docs' || url.startsWith('/docs/');
 app.decorateRequest('mediaAuth', null);
 app.addHook('onRequest', async (req, reply) => {
   if (publicPath(req.url) || !config.REQUIRE_API_KEY) return;
@@ -51,6 +51,10 @@ app.get('/ready', async (_req, reply) => {
   }
   if (!databaseOk || (config.NODE_ENV === 'production' && !scannerOk)) return reply.code(503).send({ status: 'not_ready', database: { ok: databaseOk }, scanner: { ok: scannerOk } });
   return { status: 'ready', database: { ok: true }, scanner: { ok: scannerOk }, trustEngine: { ok: true } };
+});
+app.get('/ready/ai', async (_req, reply) => {
+ const databaseOk = await store.ready();
+ return reply.code(databaseOk ? 200 : 503).send({ status: databaseOk ? 'ready' : 'not_ready', scope: 'ai_registry_and_event_api', database: { ok: databaseOk }, mediaScanning: { status: 'NOT_ASSESSED', note: 'Use /ready for the media upload and malware scanner pipeline.' } });
 });
 app.post('/v1/organizations', async (req, reply) => { if (!requireRole(req, reply, ['super_admin','platform_admin'])) return; const body = z.object({ name: z.string().trim().min(2).max(120) }).parse(req.body); const created = await store.createOrganization(body.name); return reply.code(201).send(created); });
 app.post('/v1/api-keys', async (req, reply) => { if (!requireRole(req, reply, ['super_admin','platform_admin','organization_admin'])) return; const identity = auth(req); const body = z.object({ organizationId: z.string().min(1), name: z.string().min(1).max(100), role: z.enum(roles as [ApiRole, ...ApiRole[]]) }).parse(req.body); if (identity.organizationId && identity.organizationId !== body.organizationId && identity.role !== 'super_admin' && identity.role !== 'platform_admin') return reply.code(403).send({ error: 'TENANT_MISMATCH' }); if (identity.role === 'organization_admin' && (body.role === 'super_admin' || body.role === 'platform_admin')) return reply.code(403).send({ error: 'ROLE_ESCALATION_DENIED' }); if (identity.role === 'platform_admin' && body.role === 'super_admin') return reply.code(403).send({ error: 'ROLE_ESCALATION_DENIED' }); const created = await store.createApiKey(body.organizationId, body.name, body.role); return reply.code(201).send({ ...created, warning: 'The secret is returned once. Store it securely.' }); });
@@ -74,6 +78,7 @@ app.post('/v1/ai/:id/events', async (req, reply) => {
  const organizationId = tenant(req, reply); if (!organizationId) return;
  const body = z.object({ eventType: z.enum(['OUTPUT','TOOL_REQUEST','TOOL_RESULT','ACTION_REQUESTED','ACTION_CONFIRMED','ACTION_FAILED','ACTION_UNAVAILABLE','APPROVAL_REQUESTED','APPROVAL_GRANTED','APPROVAL_DENIED','CONFIG_CHANGED']), sourceType: z.enum(['DECLARATION','DIRECT_OBSERVATION','AUTHORITATIVE_SYSTEM','SIGNED_ATTESTATION']), source: z.string().min(1).max(200), summary: z.string().min(1).max(1000), occurredAt: z.iso.datetime({ offset: true }), evidenceHash: z.string().regex(/^[a-f0-9]{64}$/) }).parse(req.body);
  if (body.sourceType !== 'DECLARATION') return reply.code(400).send({ error: 'SOURCE_NOT_VERIFIED', message: 'External API submissions are declarations until a trusted connector verifies the source.' });
+ if (['ACTION_CONFIRMED','ACTION_FAILED','ACTION_UNAVAILABLE','APPROVAL_GRANTED','APPROVAL_DENIED'].includes(body.eventType)) return reply.code(400).send({ error: 'TRUSTED_RESULT_REQUIRED' });
  const event = await aiStore.append(organizationId, (req.params as { id: string }).id, body);
  return event ? reply.code(201).send(event) : reply.code(404).send({ error: 'NOT_FOUND' });
 });
