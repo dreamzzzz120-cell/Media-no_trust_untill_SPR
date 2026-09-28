@@ -8,6 +8,7 @@ export type SourceType = 'DECLARATION' | 'DIRECT_OBSERVATION' | 'AUTHORITATIVE_S
 export interface AiSystem { id: string; organizationId: string; name: string; purpose: string; owner: string | null; provider: string | null; model: string | null; createdAt: string }
 export interface AiEvent { id: string; aiId: string; eventType: AiEventType; sourceType: SourceType; source: string; summary: string; occurredAt: string; recordedAt: string; evidenceHash: string; previousHash: string | null; eventHash: string; state: EvidenceState; relatedEventId: string | null }
 export interface AiAlert { id: string; aiId: string; claimEventId: string; resultEventId: string; severity: 'CRITICAL'; summary: string; createdAt: string }
+export interface AiIntegrity { state: 'VALID_INTERNAL_CHAIN' | 'BROKEN' | 'EMPTY'; checkedEvents: number; failures: string[]; externalAnchor: 'NOT_CONFIGURED' }
 export type EventInput = Pick<AiEvent, 'eventType' | 'sourceType' | 'source' | 'summary' | 'occurredAt' | 'evidenceHash'>;
 export interface ConfirmationInput { claimEventId: string; outcome: ExternalOutcome; source: string; occurredAt: string; evidenceHash: string; externalEventId: string }
 export interface AiStore {
@@ -18,12 +19,19 @@ export interface AiStore {
  confirm(org: string, aiId: string, input: ConfirmationInput): Promise<{ event: AiEvent; alert: AiAlert | null } | null>;
  timeline(org: string, aiId: string): Promise<AiEvent[]>;
  alerts(org: string, aiId: string): Promise<AiAlert[]>;
+ integrity(org: string, aiId: string): Promise<AiIntegrity>;
  close(): Promise<void>;
 }
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 function makeEvent(aiId: string, input: EventInput, previousHash: string | null, state: EvidenceState = 'DECLARED', relatedEventId: string | null = null): AiEvent {
- const event = { id: randomUUID(), aiId, ...input, recordedAt: new Date().toISOString(), previousHash, state, relatedEventId };
+ const event = { id: randomUUID(), aiId, ...input, occurredAt: new Date(input.occurredAt).toISOString(), recordedAt: new Date().toISOString(), previousHash, state, relatedEventId };
  return { ...event, eventHash: digest(JSON.stringify(event)) };
+}
+function eventDigest(e: AiEvent) { return digest(JSON.stringify({ id:e.id, aiId:e.aiId, eventType:e.eventType, sourceType:e.sourceType, source:e.source, summary:e.summary, occurredAt:e.occurredAt, evidenceHash:e.evidenceHash, recordedAt:e.recordedAt, previousHash:e.previousHash, state:e.state, relatedEventId:e.relatedEventId })); }
+function checkChain(events: AiEvent[], ledgerHashes?: Map<string, string>): AiIntegrity {
+ const failures: string[] = []; let previous: string | null = null;
+ for (const e of events) { if (e.previousHash !== previous || e.eventHash !== eventDigest(e) || ledgerHashes && ledgerHashes.get(e.id) !== e.evidenceHash) failures.push(e.id); previous = e.eventHash; }
+ return { state: failures.length ? 'BROKEN' : events.length ? 'VALID_INTERNAL_CHAIN' : 'EMPTY', checkedEvents: events.length, failures, externalAnchor: 'NOT_CONFIGURED' };
 }
 function confirmation(aiId: string, claim: AiEvent, input: ConfirmationInput, previousHash: string | null) {
  const decision = reconcileAction(claim.summary, input.outcome, true);
@@ -51,6 +59,7 @@ class MemoryAiStore implements AiStore {
  }
  async timeline(org: string, aiId: string) { if (!await this.get(org, aiId)) return []; return structuredClone(this.events.get(aiId) ?? []).sort((a,b) => a.occurredAt.localeCompare(b.occurredAt) || a.id.localeCompare(b.id)); }
  async alerts(org: string, aiId: string) { return await this.get(org, aiId) ? structuredClone(this.incidents.get(aiId) ?? []) : []; }
+ async integrity(org: string, aiId: string) { return await this.get(org, aiId) ? checkChain(this.events.get(aiId) ?? []) : { state:'EMPTY' as const, checkedEvents:0, failures:[], externalAnchor:'NOT_CONFIGURED' as const }; }
  async close() { this.systems.clear(); this.events.clear(); this.incidents.clear(); this.confirmations.clear(); }
 }
 interface SystemRow { id: string; organization_id: string; name: string; purpose: string; owner: string | null; provider: string | null; model: string | null; created_at: Date }
@@ -89,6 +98,10 @@ class PgAiStore implements AiStore {
  }
  async timeline(org: string, aiId: string) { const rows = await this.sql<EventRow[]>`SELECT * FROM flight_records WHERE organization_id=${org} AND ai_identity_id=${aiId} ORDER BY occurred_at ASC, sequence ASC LIMIT 1000`; return rows.map(eventFromRow); }
  async alerts(org: string, aiId: string) { const rows = await this.sql<AlertRow[]>`SELECT * FROM ai_alerts WHERE organization_id=${org} AND ai_identity_id=${aiId} ORDER BY created_at DESC LIMIT 100`; return rows.map(alertFromRow); }
+ async integrity(org: string, aiId: string) {
+  const rows = await this.sql<(EventRow & { ledger_hash: string | null })[]>`SELECT f.*, l.cryptographic_hash AS ledger_hash FROM flight_records f LEFT JOIN evidence_ledger l ON l.flight_record_id=f.id AND l.organization_id=f.organization_id WHERE f.organization_id=${org} AND f.ai_identity_id=${aiId} ORDER BY f.sequence ASC`;
+  return checkChain(rows.map(eventFromRow), new Map(rows.map(r => [r.id, r.ledger_hash ?? 'MISSING'])));
+ }
  async close() { await this.sql.end({ timeout: 5 }); }
 }
 async function insertEvent(tx: postgres.TransactionSql, org: string, event: AiEvent, externalEventId: string | null = null) {
