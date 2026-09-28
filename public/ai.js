@@ -10,8 +10,9 @@ async function api(path, options = {}) {
 }
 async function refresh() {
  const path = `/v1/ai/${encodeURIComponent(id())}`;
- const [system, history, alerts, coverage] = await Promise.all([api(path), api(`${path}/timeline`), api(`${path}/alerts`), api(`${path}/coverage`)]);
- $('#detail').replaceChildren(); $('#timeline').replaceChildren(); $('#alerts').replaceChildren(); $('#coverage').replaceChildren();
+ const [system, history, alerts, coverage, integrity] = await Promise.all([api(path), api(`${path}/timeline`), api(`${path}/alerts`), api(`${path}/coverage`), api(`${path}/integrity`)]);
+ $('#detail').replaceChildren(); $('#timeline').replaceChildren(); $('#alerts').replaceChildren(); $('#coverage').replaceChildren(); $('#integrity').replaceChildren();
+ const chain = document.createElement('p'); chain.textContent = `${integrity.state}: ${integrity.checkedEvents} events checked. External anchor: ${integrity.externalAnchor}.${integrity.failures.length ? ` Failed events: ${integrity.failures.join(', ')}` : ''}`; $('#integrity').append(chain);
  const heading = document.createElement('h3'); heading.textContent = `${system.name} — ${system.id}`; $('#detail').append(heading);
  const note = document.createElement('p'); note.textContent = `Purpose: ${system.purpose}. Monitoring: ${system.monitoringStatus}. Compliance: ${system.compliance.state} — ${system.compliance.reason}`; $('#detail').append(note);
  for (const source of coverage.sources) { const li = document.createElement('li'); li.className = 'coverage'; li.textContent = `${source.name}: ${source.state}${source.reason ? ` — ${source.reason}` : ''}`; $('#coverage').append(li); }
