@@ -103,4 +103,4 @@ Migration `002_media_passport.sql` adds organizations, creators, media assets, P
 
 `npm run check` must pass lint, typecheck, tests and build. CI also checks lockfile integrity and production dependency vulnerabilities.
 
-The repository contains the production application foundation, but a real production release still requires deployment-specific credentials and infrastructure verification that cannot be fabricated in Git: PostgreSQL persistence, malware scanner, persistent object storage/ephemeral deletion behavior, any selected AI/source-analysis providers, authenticated tenant-isolation tests, and an executed backup/restore drill.
+The repository contains the production application foundation, but a real production release still requires deployment-specific credentials and infrastructure verification that cannot be fabricated in Git: PostgreSQL persistence, malware scanner, temporary upload storage and deletion behavior, any selected AI/source-analysis providers, authenticated tenant-isolation tests, and an executed backup/restore drill.
