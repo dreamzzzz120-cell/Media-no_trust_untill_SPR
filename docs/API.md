@@ -4,6 +4,8 @@ All `/v1/*` routes require `x-api-key` in production. API keys are stored as SHA
 
 ## Authentication / administration
 
+`POST /v1/organizations` — create a publisher organization. Requires platform admin or super admin. Save the returned ID for key creation.
+
 `POST /v1/api-keys` — create a scoped API key. Requires organization admin or higher. The returned secret is shown once.
 
 Roles: `viewer`, `creator`, `reviewer`, `moderator`, `analyst`, `organization_admin`, `platform_admin`, `super_admin`.
