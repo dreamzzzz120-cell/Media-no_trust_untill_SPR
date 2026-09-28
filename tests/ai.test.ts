@@ -14,6 +14,7 @@ describe('AI flight recorder', () => {
   const second = await store.append('tenant-a', ai.id, { ...input, eventType: 'ACTION_FAILED', occurredAt: '2026-09-28T14:01:00.000Z', summary: 'The refund was reported failed.' });
   expect(first?.evidenceHash).toBe(evidenceHash);
   expect(second?.previousHash).toBe(first?.eventHash);
+  expect((await store.integrity('tenant-a', ai.id)).state).toBe('VALID_INTERNAL_CHAIN');
   expect(await store.timeline('tenant-b', ai.id)).toEqual([]);
   expect((await store.timeline('tenant-a', ai.id)).map(e => e.summary)).toEqual(['Agent requested a refund.', 'The refund was reported failed.']);
   await store.close();
