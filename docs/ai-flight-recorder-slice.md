@@ -18,6 +18,8 @@ The ledger stores a hash reference for each event. Its source payload is not sto
 
 `GET /v1/ai/:id/integrity` recomputes the internal event hashes, checks the append links, and checks each ledger hash reference. It reports `VALID_INTERNAL_CHAIN`, `BROKEN`, or `EMPTY` with the event IDs that failed. It always states that no external anchor is configured. Internal chain integrity does not verify the truth of a source's account of an action.
 
+Timeline reads are paginated in ingestion order. `GET /v1/ai/:id/timeline?limit=100&afterSequence=0` returns `hasMore` and `nextCursor`; clients continue with that cursor until `hasMore` is false. Each event also includes its actual occurrence time, which may differ from ingestion order. The UI exposes a Load more control and never implies the first page is the entire history.
+
 Apply `db/005_ai_flight_recorder.sql` through the repository migration command before deploying the new routes. The migration was executed locally in embedded PostgreSQL, with inserts, mutation rejection, and tenant foreign-key rejection checked. It has not been applied to production or run against a deployed PostgreSQL service. The authenticated gateway must be built or configured in the customer's environment before any event can be independently confirmed.
 
 `/ready/ai` checks database access for the AI registry and event API only. `/ready` continues to require the malware scanner for media uploads. A healthy AI readiness response must never be represented as evidence that media scanning works. The event submission API rejects self-reported completion, failure, and approval-result types; those require the signed connector path.
