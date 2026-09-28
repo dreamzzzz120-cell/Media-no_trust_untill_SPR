@@ -86,8 +86,10 @@ app.get('/v1/ai/:id/timeline', async (req, reply) => {
  const organizationId = tenant(req, reply); if (!organizationId) return;
  const id = (req.params as { id: string }).id;
  if (!await aiStore.get(organizationId, id)) return reply.code(404).send({ error: 'NOT_FOUND' });
- const events = await aiStore.timeline(organizationId, id);
- return { aiId: id, coverage: 'REPORTED_EVENTS_ONLY', events: events.map(e => ({ ...e, statement: `${e.occurredAt}: ${e.summary} (${e.eventType}; ${e.sourceType} from ${e.source}). Evidence SHA-256: ${e.evidenceHash}.` })) };
+ const query = z.object({ afterSequence: z.coerce.number().int().nonnegative().default(0), limit: z.coerce.number().int().min(1).max(500).default(100) }).parse(req.query);
+ const page = await aiStore.timeline(organizationId, id, query.afterSequence, query.limit + 1);
+ const hasMore = page.length > query.limit; const events = page.slice(0, query.limit);
+ return { aiId: id, coverage: 'REPORTED_EVENTS_ONLY', order: 'INGESTION_SEQUENCE', hasMore, nextCursor: hasMore ? events.at(-1)?.sequence : null, events: events.map(e => ({ ...e, statement: `${e.occurredAt}: ${e.summary} (${e.eventType}; ${e.sourceType} from ${e.source}). Evidence SHA-256: ${e.evidenceHash}.` })) };
 });
 app.get('/v1/ai/:id/alerts', async (req, reply) => {
  const organizationId = tenant(req, reply); if (!organizationId) return;
