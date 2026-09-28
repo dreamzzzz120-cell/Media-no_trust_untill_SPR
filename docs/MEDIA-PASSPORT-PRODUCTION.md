@@ -26,7 +26,7 @@ The system distinguishes AI involvement from deception. AI-assisted or AI-edited
 
 ## Evidence retention
 
-Hashes and structured findings should be retained preferentially. Raw media is quarantined during processing and is deleted after successful verification when `DELETE_SOURCE_AFTER_VERIFICATION=true`.
+Hashes and structured findings should be retained preferentially. Raw media is held in temporary quarantine during processing and deleted after successful verification. A crash can leave temporary files until the container is replaced; configure a size limit and cleanup policy for the upload directory.
 
 ## Security boundary
 

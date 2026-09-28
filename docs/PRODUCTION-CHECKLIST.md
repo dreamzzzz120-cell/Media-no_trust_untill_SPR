@@ -7,7 +7,7 @@ The application intentionally fails closed at startup unless required production
 - [ ] Managed PostgreSQL provisioned and `db/001_init.sql` applied.
 - [ ] `REQUIRE_API_KEY=true` and a 32+ character secret configured.
 - [ ] HTTPS termination enabled at the trusted edge.
-- [ ] `PERSISTENT_STORAGE_CONFIRMED=true` set only when `UPLOAD_DIR` is backed by durable, access-controlled storage/volume.
+- [ ] `UPLOAD_DIR` is isolated, writable by the app, size-limited, and cleaned after verification; raw uploads are temporary quarantine data.
 - [ ] Malware scanner deployed at `MALWARE_SCAN_URL`; it must accept uploaded bytes and return JSON `{ "clean": boolean }`.
 - [ ] `MALWARE_SCAN_TOKEN` configured with the same secret on the app and scanner adapter; unauthenticated `/scan` returns 401.
 - [ ] Retention/deletion policy configured for uploaded media and verification records.

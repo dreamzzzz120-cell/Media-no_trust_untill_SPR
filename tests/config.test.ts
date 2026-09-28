@@ -6,7 +6,6 @@ const production = {
   REQUIRE_API_KEY: 'true',
   API_KEY: 'a'.repeat(40),
   DATABASE_URL: 'postgres://user:pass@example.com/db',
-  PERSISTENT_STORAGE_CONFIRMED: 'true',
   MALWARE_SCAN_URL: 'https://scanner.example.test/scan',
   MALWARE_SCAN_TOKEN: 't'.repeat(20),
 };
@@ -18,8 +17,8 @@ describe('configuration', () => {
   it('rejects production API-key bypass', () => {
     expect(() => loadConfig({ ...production, REQUIRE_API_KEY: 'false' })).toThrow();
   });
-  it('rejects production without durable storage confirmation', () => {
-    expect(() => loadConfig({ ...production, PERSISTENT_STORAGE_CONFIRMED: 'false' })).toThrow();
+  it('requires deletion of quarantined source media in production', () => {
+    expect(() => loadConfig({ ...production, DELETE_SOURCE_AFTER_VERIFICATION: 'false' })).toThrow();
   });
   it('rejects production without malware scanning', () => {
     expect(() => loadConfig({ ...production, MALWARE_SCAN_URL: undefined })).toThrow();
