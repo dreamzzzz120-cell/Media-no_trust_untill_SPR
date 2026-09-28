@@ -95,6 +95,12 @@ app.get('/v1/ai/:id/alerts', async (req, reply) => {
  if (!await aiStore.get(organizationId, id)) return reply.code(404).send({ error: 'NOT_FOUND' });
  return { aiId: id, alerts: await aiStore.alerts(organizationId, id) };
 });
+app.get('/v1/ai/:id/integrity', async (req, reply) => {
+ const organizationId = tenant(req, reply); if (!organizationId) return;
+ const id = (req.params as { id: string }).id;
+ if (!await aiStore.get(organizationId, id)) return reply.code(404).send({ error: 'NOT_FOUND' });
+ return aiStore.integrity(organizationId, id);
+});
 app.get('/v1/ai/:id/coverage', async (req, reply) => {
  const organizationId = tenant(req, reply); if (!organizationId) return;
  const id = (req.params as { id: string }).id;
