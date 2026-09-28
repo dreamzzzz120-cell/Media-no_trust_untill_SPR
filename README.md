@@ -1,4 +1,23 @@
-# Media Passport
+# Media Passport — AI Disclosure Compliance Layer
+
+Media Passport is an API-first compliance infrastructure layer for platforms, publishers, AI providers and professional deployers. It sits in the existing content flow and turns AI-transparency requirements into an evidence-backed machine workflow:
+
+**content → quarantine/malware scan → hash → provenance/C2PA → AI-status evidence → legal-scope assessment → marking/disclosure instruction → immutable compliance record → Passport/API response**
+
+The product is not a generic AI detector and it does not claim legal compliance from weak signals. When required evidence is unavailable, the result remains **UNKNOWN** or **ACTION_REQUIRED**.
+
+## Product surface
+
+- AI-generated/manipulated content evidence and provenance
+- Article 50 provider/deployer obligation assessment
+- machine-readable marking requirements
+- human-visible/audible disclosure requirements for deepfakes and applicable public-interest text
+- exception/context inputs such as human review and editorial responsibility
+- evidence lineage, content hashes, policy versions and auditable record digests
+- Media Passport verification records and public verification views
+- API-first integration so platforms can call the layer inside their existing upload/publish workflow
+- fail-closed malware and readiness gates
+
 
 **Evidence before amplification.**
 
