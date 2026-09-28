@@ -50,6 +50,7 @@ it('registers, records, rejects forgery and cross-tenant access, then shows a ve
  const unavailable=await request(endpoint,null,unreachable,unreachableSignature);
  expect(unavailable.status).toBe(201); expect(unavailable.body.event.state).toBe('UNAVAILABLE'); expect(unavailable.body.alert).toBeNull();
  const history=await request(`/v1/ai/${id}/timeline`,keyA); expect(history.body.events).toHaveLength(3); expect(history.body.events[1].relatedEventId).toBe(claim.body.id);
+ const integrity=await request(`/v1/ai/${id}/integrity`,keyA); expect(integrity.body.state).toBe('VALID_INTERNAL_CHAIN'); expect(integrity.body.externalAnchor).toBe('NOT_CONFIGURED');
  const alerts=await request(`/v1/ai/${id}/alerts`,keyA); expect(alerts.body.alerts).toHaveLength(1);
  const coverage=await request(`/v1/ai/${id}/coverage`,keyA); expect(coverage.body.sources.some((s: {state:string})=>s.state==='UNAVAILABLE')).toBe(true);
  expect((await request(`/v1/ai/${id}/alerts`,keyB)).status).toBe(404);
