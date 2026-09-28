@@ -14,10 +14,12 @@ import { verifyMedia } from './verification/engine.js';
 import { deleteStoredMedia, storeUpload } from './storage.js';
 import { scanForMalware } from './security/malware.js';
 import { canReadTenantRecord } from './tenant.js';
+import { createAiStore } from './ai.js';
 
 const config = loadConfig();
 const app = Fastify({ logger: { level: config.LOG_LEVEL, redact: ['req.headers.authorization', 'req.headers.x-api-key', 'headers.x-api-key'] }, bodyLimit: config.MAX_UPLOAD_BYTES, requestTimeout: config.REQUEST_TIMEOUT_MS, trustProxy: config.TRUST_PROXY });
 const store = createStore(config.DATABASE_URL);
+const aiStore = createAiStore(config.DATABASE_URL);
 const idPattern = /^[A-Za-z0-9_-]{10,40}$/;
 const roles: ApiRole[] = ['viewer','creator','reviewer','moderator','analyst','organization_admin','platform_admin','super_admin'];
 const aiStatuses = ['NONE','AI_ASSISTED','AI_EDITED','AI_GENERATED','AI_SYNTHETIC_PERSON','AI_SYNTHETIC_VOICE','AI_DEEPFAKE','UNKNOWN'] as const;
@@ -27,7 +29,7 @@ await app.register(multipart, { limits: { fileSize: config.MAX_UPLOAD_BYTES, fil
 await app.register(fastifyStatic, { root: resolve('public'), prefix: '/' });
 await app.register(swagger, { openapi: { info: { title: 'Media Passport API', version: '1.0.0' }, servers: [{ url: '/' }], tags: [{ name: 'media' }, { name: 'passport' }, { name: 'trust' }, { name: 'cases' }, { name: 'admin' }] } });
 await app.register(swaggerUi, { routePrefix: '/docs' });
-const publicPath = (url: string) => url === '/health' || url === '/ready' || url === '/' || url.startsWith('/public/') || url.startsWith('/passport/') || url.startsWith('/app.') || url.startsWith('/styles.') || url.startsWith('/passport.') || url === '/docs' || url.startsWith('/docs/');
+const publicPath = (url: string) => url === '/health' || url === '/ready' || url === '/' || url.startsWith('/public/') || url.startsWith('/passport/') || url.startsWith('/app.') || url.startsWith('/styles.') || url.startsWith('/passport.') || url === '/ai.html' || url === '/ai.js' || url === '/docs' || url.startsWith('/docs/');
 app.decorateRequest('mediaAuth', null);
 app.addHook('onRequest', async (req, reply) => {
   if (publicPath(req.url) || !config.REQUIRE_API_KEY) return;
@@ -52,6 +54,36 @@ app.get('/ready', async (_req, reply) => {
 });
 app.post('/v1/organizations', async (req, reply) => { if (!requireRole(req, reply, ['super_admin','platform_admin'])) return; const body = z.object({ name: z.string().trim().min(2).max(120) }).parse(req.body); const created = await store.createOrganization(body.name); return reply.code(201).send(created); });
 app.post('/v1/api-keys', async (req, reply) => { if (!requireRole(req, reply, ['super_admin','platform_admin','organization_admin'])) return; const identity = auth(req); const body = z.object({ organizationId: z.string().min(1), name: z.string().min(1).max(100), role: z.enum(roles as [ApiRole, ...ApiRole[]]) }).parse(req.body); if (identity.organizationId && identity.organizationId !== body.organizationId && identity.role !== 'super_admin' && identity.role !== 'platform_admin') return reply.code(403).send({ error: 'TENANT_MISMATCH' }); if (identity.role === 'organization_admin' && (body.role === 'super_admin' || body.role === 'platform_admin')) return reply.code(403).send({ error: 'ROLE_ESCALATION_DENIED' }); if (identity.role === 'platform_admin' && body.role === 'super_admin') return reply.code(403).send({ error: 'ROLE_ESCALATION_DENIED' }); const created = await store.createApiKey(body.organizationId, body.name, body.role); return reply.code(201).send({ ...created, warning: 'The secret is returned once. Store it securely.' }); });
+const aiWriterRoles: ApiRole[] = ['analyst','organization_admin','platform_admin','super_admin'];
+function tenant(req: FastifyRequest, reply: FastifyReply): string | null { const id = auth(req).organizationId; if (!id) { void reply.code(403).send({ error: 'TENANT_KEY_REQUIRED' }); return null; } return id; }
+app.post('/v1/ai', async (req, reply) => {
+ if (!requireRole(req, reply, aiWriterRoles)) return;
+ const organizationId = tenant(req, reply); if (!organizationId) return;
+ const body = z.object({ name: z.string().trim().min(1).max(120), purpose: z.string().trim().min(1).max(500), owner: z.string().max(120).nullable().default(null), provider: z.string().max(120).nullable().default(null), model: z.string().max(120).nullable().default(null) }).parse(req.body);
+ return reply.code(201).send(await aiStore.register(organizationId, body));
+});
+app.get('/v1/ai/:id', async (req, reply) => {
+ const organizationId = tenant(req, reply); if (!organizationId) return;
+ const system = await aiStore.get(organizationId, (req.params as { id: string }).id);
+ if (!system) return reply.code(404).send({ error: 'NOT_FOUND' });
+ const events = await aiStore.timeline(organizationId, system.id);
+ return { ...system, observedEvents: events.length, monitoringStatus: 'NOT_CONNECTED', compliance: { state: 'HOLD', reason: 'No reviewed, applicable regulatory rule set or control evidence is configured.' }, evidenceCoverage: 'REPORTED_EVENTS_ONLY' };
+});
+app.post('/v1/ai/:id/events', async (req, reply) => {
+ if (!requireRole(req, reply, aiWriterRoles)) return;
+ const organizationId = tenant(req, reply); if (!organizationId) return;
+ const body = z.object({ eventType: z.enum(['OUTPUT','TOOL_REQUEST','TOOL_RESULT','ACTION_REQUESTED','ACTION_CONFIRMED','ACTION_FAILED','APPROVAL_REQUESTED','APPROVAL_GRANTED','APPROVAL_DENIED','CONFIG_CHANGED']), sourceType: z.enum(['DECLARATION','DIRECT_OBSERVATION','AUTHORITATIVE_SYSTEM','SIGNED_ATTESTATION']), source: z.string().min(1).max(200), summary: z.string().min(1).max(1000), occurredAt: z.iso.datetime({ offset: true }), evidenceHash: z.string().regex(/^[a-f0-9]{64}$/) }).parse(req.body);
+ if (body.sourceType !== 'DECLARATION') return reply.code(400).send({ error: 'SOURCE_NOT_VERIFIED', message: 'External API submissions are declarations until a trusted connector verifies the source.' });
+ const event = await aiStore.append(organizationId, (req.params as { id: string }).id, body);
+ return event ? reply.code(201).send(event) : reply.code(404).send({ error: 'NOT_FOUND' });
+});
+app.get('/v1/ai/:id/timeline', async (req, reply) => {
+ const organizationId = tenant(req, reply); if (!organizationId) return;
+ const id = (req.params as { id: string }).id;
+ if (!await aiStore.get(organizationId, id)) return reply.code(404).send({ error: 'NOT_FOUND' });
+ const events = await aiStore.timeline(organizationId, id);
+ return { aiId: id, coverage: 'REPORTED_EVENTS_ONLY', events: events.map(e => ({ ...e, statement: `${e.occurredAt}: ${e.summary} (${e.eventType}; ${e.sourceType} from ${e.source}). Evidence SHA-256: ${e.evidenceHash}.` })) };
+});
 const verifyUpload = async (req: FastifyRequest, reply: FastifyReply) => {
   if (!requireRole(req, reply, ['creator','analyst','organization_admin','platform_admin','super_admin'])) return;
   const identity = auth(req); if (req.url === '/v1/publisher/verify' && !identity.organizationId) return reply.code(403).send({ error: 'PUBLISHER_KEY_REQUIRED' }); const declaredHeader = String(req.headers['x-declared-ai-use'] ?? 'UNKNOWN').toUpperCase(); const declaredAiUse = (aiStatuses as readonly string[]).includes(declaredHeader) ? declaredHeader as typeof aiStatuses[number] : 'UNKNOWN';
@@ -85,5 +117,5 @@ app.post('/v1/recommendation/evaluate', async (req, reply) => { if (!requireRole
 app.get('/public/:id', async (req, reply) => { const record = await getRecord((req.params as { id: string }).id, reply); if (!record) return; return { passportId: record.asset.id, asset: { sha256: record.asset.sha256, mime: record.asset.mime, kind: record.asset.kind, sizeBytes: record.asset.sizeBytes }, decision: record.decision, trustScore: record.trustScore, confidence: record.confidence, aiStatus: record.aiStatus, provenance: { status: record.provenance.status, embedded: record.provenance.embedded, trusted: record.provenance.trusted }, evidence: record.observations, limitations: record.limitations }; });
 app.get('/passport/:id', async (req, reply) => { const record = await getRecord((req.params as { id: string }).id, reply); if (!record) return; const esc = (v: unknown) => String(v).replace(/[&<>\"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;' }[c] ?? c)); const evidence = record.observations.map((o) => `<li><strong>${esc(o.signal)}</strong>: ${esc(o.result)} — ${esc(o.details ?? '')}</li>`).join(''); const vector = Object.entries(record.trustVector).map(([k,v]) => `<li><strong>${esc(k)}</strong>: ${esc(v)}</li>`).join(''); const limitations = record.limitations.map((x) => `<li>${esc(x)}</li>`).join(''); return reply.type('text/html').send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer"><link rel="stylesheet" href="/passport.css"><title>Media Passport ${esc(record.asset.id)}</title></head><body><main><h1>Media Passport</h1><section><h2>${esc(record.decision)}</h2><p>Trust score: <strong>${esc(record.trustScore ?? 'N/A')}</strong> · Confidence: <strong>${esc(Math.round(record.confidence * 100))}%</strong></p><p>AI status: ${esc(record.aiStatus)} · Provenance: ${esc(record.provenance.status)}</p><p>SHA-256: <code>${esc(record.asset.sha256)}</code></p></section><section><h2>Trust Vector</h2><ul>${vector}</ul></section><section><h2>Evidence Explorer</h2><ul>${evidence || '<li>No additional evidence.</li>'}</ul></section><section><h2>Limitations</h2><ul>${limitations}</ul></section></main></body></html>`); });
 app.setErrorHandler((error, req, reply) => { if (error instanceof z.ZodError) return reply.code(400).send({ error: 'INVALID_REQUEST', issues: error.issues }); const message = error instanceof Error ? error.message : String(error); if ((error as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE' || message === 'UPLOAD_TOO_LARGE') return reply.code(413).send({ error: 'UPLOAD_TOO_LARGE' }); if (message === 'UNSUPPORTED_MEDIA_TYPE') return reply.code(415).send({ error: message }); if (message === 'MIME_MISMATCH') return reply.code(400).send({ error: message }); req.log.error({ err: error }, 'request failed'); return reply.code(500).send({ error: 'INTERNAL_ERROR' }); });
-const shutdown = async (signal: string) => { app.log.info({ signal }, 'shutting down'); await app.close(); await store.close(); process.exit(0); };
+const shutdown = async (signal: string) => { app.log.info({ signal }, 'shutting down'); await app.close(); await store.close(); await aiStore.close(); process.exit(0); };
 process.once('SIGTERM', () => void shutdown('SIGTERM')); process.once('SIGINT', () => void shutdown('SIGINT')); await app.listen({ host: config.HOST, port: config.PORT });
