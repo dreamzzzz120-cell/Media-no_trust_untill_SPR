@@ -5,7 +5,7 @@ import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import fastifyStatic from '@fastify/static';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 import { loadConfig } from './config.js';
@@ -29,7 +29,7 @@ await app.register(multipart, { limits: { fileSize: config.MAX_UPLOAD_BYTES, fil
 await app.register(fastifyStatic, { root: resolve('public'), prefix: '/' });
 await app.register(swagger, { openapi: { info: { title: 'Media Passport API', version: '1.0.0' }, servers: [{ url: '/' }], tags: [{ name: 'media' }, { name: 'passport' }, { name: 'trust' }, { name: 'cases' }, { name: 'admin' }] } });
 await app.register(swaggerUi, { routePrefix: '/docs' });
-const publicPath = (url: string) => url === '/health' || url === '/ready' || url === '/' || url.startsWith('/public/') || url.startsWith('/passport/') || url.startsWith('/app.') || url.startsWith('/styles.') || url.startsWith('/passport.') || url === '/ai.html' || url === '/ai.js' || url === '/docs' || url.startsWith('/docs/');
+const publicPath = (url: string) => url === '/health' || url === '/ready' || url === '/' || url === '/v1/integrations/action-confirmations' || url.startsWith('/public/') || url.startsWith('/passport/') || url.startsWith('/app.') || url.startsWith('/styles.') || url.startsWith('/passport.') || url === '/ai.html' || url === '/ai.js' || url === '/docs' || url.startsWith('/docs/');
 app.decorateRequest('mediaAuth', null);
 app.addHook('onRequest', async (req, reply) => {
   if (publicPath(req.url) || !config.REQUIRE_API_KEY) return;
@@ -72,7 +72,7 @@ app.get('/v1/ai/:id', async (req, reply) => {
 app.post('/v1/ai/:id/events', async (req, reply) => {
  if (!requireRole(req, reply, aiWriterRoles)) return;
  const organizationId = tenant(req, reply); if (!organizationId) return;
- const body = z.object({ eventType: z.enum(['OUTPUT','TOOL_REQUEST','TOOL_RESULT','ACTION_REQUESTED','ACTION_CONFIRMED','ACTION_FAILED','APPROVAL_REQUESTED','APPROVAL_GRANTED','APPROVAL_DENIED','CONFIG_CHANGED']), sourceType: z.enum(['DECLARATION','DIRECT_OBSERVATION','AUTHORITATIVE_SYSTEM','SIGNED_ATTESTATION']), source: z.string().min(1).max(200), summary: z.string().min(1).max(1000), occurredAt: z.iso.datetime({ offset: true }), evidenceHash: z.string().regex(/^[a-f0-9]{64}$/) }).parse(req.body);
+ const body = z.object({ eventType: z.enum(['OUTPUT','TOOL_REQUEST','TOOL_RESULT','ACTION_REQUESTED','ACTION_CONFIRMED','ACTION_FAILED','ACTION_UNAVAILABLE','APPROVAL_REQUESTED','APPROVAL_GRANTED','APPROVAL_DENIED','CONFIG_CHANGED']), sourceType: z.enum(['DECLARATION','DIRECT_OBSERVATION','AUTHORITATIVE_SYSTEM','SIGNED_ATTESTATION']), source: z.string().min(1).max(200), summary: z.string().min(1).max(1000), occurredAt: z.iso.datetime({ offset: true }), evidenceHash: z.string().regex(/^[a-f0-9]{64}$/) }).parse(req.body);
  if (body.sourceType !== 'DECLARATION') return reply.code(400).send({ error: 'SOURCE_NOT_VERIFIED', message: 'External API submissions are declarations until a trusted connector verifies the source.' });
  const event = await aiStore.append(organizationId, (req.params as { id: string }).id, body);
  return event ? reply.code(201).send(event) : reply.code(404).send({ error: 'NOT_FOUND' });
@@ -83,6 +83,41 @@ app.get('/v1/ai/:id/timeline', async (req, reply) => {
  if (!await aiStore.get(organizationId, id)) return reply.code(404).send({ error: 'NOT_FOUND' });
  const events = await aiStore.timeline(organizationId, id);
  return { aiId: id, coverage: 'REPORTED_EVENTS_ONLY', events: events.map(e => ({ ...e, statement: `${e.occurredAt}: ${e.summary} (${e.eventType}; ${e.sourceType} from ${e.source}). Evidence SHA-256: ${e.evidenceHash}.` })) };
+});
+app.get('/v1/ai/:id/alerts', async (req, reply) => {
+ const organizationId = tenant(req, reply); if (!organizationId) return;
+ const id = (req.params as { id: string }).id;
+ if (!await aiStore.get(organizationId, id)) return reply.code(404).send({ error: 'NOT_FOUND' });
+ return { aiId: id, alerts: await aiStore.alerts(organizationId, id) };
+});
+app.get('/v1/ai/:id/coverage', async (req, reply) => {
+ const organizationId = tenant(req, reply); if (!organizationId) return;
+ const id = (req.params as { id: string }).id;
+ if (!await aiStore.get(organizationId, id)) return reply.code(404).send({ error: 'NOT_FOUND' });
+ const events = await aiStore.timeline(organizationId, id);
+ return { aiId: id, state: 'UNKNOWN', scope: 'REGISTERED_AI_ONLY', sources: [
+  { name: 'Submitted events', state: events.length ? 'DECLARED' : 'UNKNOWN', observedCount: events.filter(e => e.sourceType === 'DECLARATION').length },
+  { name: 'Provider activity', state: 'UNAVAILABLE', reason: 'No provider activity connector is installed.' },
+  { name: 'Tool execution', state: 'UNAVAILABLE', reason: 'No independent tool execution collector is installed.' },
+  { name: 'Organization-wide AI discovery', state: 'UNAVAILABLE', reason: 'No organization discovery connector is installed.' }
+ ] };
+});
+const confirmationSchema = z.object({ organizationId: z.string().min(1).max(100), aiId: z.uuid(), claimEventId: z.uuid(), outcome: z.enum(['CONFIRMED','FAILED','ABSENT','UNREACHABLE']), source: z.string().regex(/^[A-Za-z0-9_.:-]{1,100}$/), occurredAt: z.iso.datetime({ offset: true }), evidenceHash: z.string().regex(/^[a-f0-9]{64}$/), externalEventId: z.string().regex(/^[A-Za-z0-9_.:-]{1,150}$/) });
+app.post('/v1/integrations/action-confirmations', async (req, reply) => {
+ if (!config.TRUSTED_ACTION_WEBHOOK_SECRET || !config.TRUSTED_ACTION_SOURCE) return reply.code(503).send({ error: 'CONNECTOR_NOT_CONFIGURED' });
+ const body = confirmationSchema.parse(req.body);
+ if (body.source !== config.TRUSTED_ACTION_SOURCE) return reply.code(403).send({ error: 'UNTRUSTED_SOURCE' });
+ const canonical = [body.organizationId, body.aiId, body.claimEventId, body.outcome, body.source, body.occurredAt, body.evidenceHash, body.externalEventId].join('\n');
+ const expected = createHmac('sha256', config.TRUSTED_ACTION_WEBHOOK_SECRET).update(canonical).digest();
+ const supplied = req.headers['x-media-signature'];
+ if (typeof supplied !== 'string' || !/^[a-f0-9]{64}$/.test(supplied) || !timingSafeEqual(expected, Buffer.from(supplied, 'hex'))) return reply.code(401).send({ error: 'INVALID_CONNECTOR_SIGNATURE' });
+ try {
+  const result = await aiStore.confirm(body.organizationId, body.aiId, body);
+  return result ? reply.code(201).send(result) : reply.code(404).send({ error: 'CLAIM_NOT_FOUND' });
+ } catch (error) {
+  if (error instanceof Error && error.message === 'DUPLICATE_CONFIRMATION' || typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') return reply.code(409).send({ error: 'DUPLICATE_CONFIRMATION' });
+  throw error;
+ }
 });
 const verifyUpload = async (req: FastifyRequest, reply: FastifyReply) => {
   if (!requireRole(req, reply, ['creator','analyst','organization_admin','platform_admin','super_admin'])) return;
