@@ -1,19 +1,40 @@
-const form = document.querySelector('#lookup');
-form.addEventListener('submit', async event => {
+const $ = selector => document.querySelector(selector);
+const key = () => $('#key').value;
+const id = () => $('#ai').value.trim();
+const status = message => { $('#status').textContent = message; };
+async function api(path, options = {}) {
+ const response = await fetch(path, { ...options, cache: 'no-store', headers: { 'x-api-key': key(), 'content-type': 'application/json', ...options.headers } });
+ const body = await response.json();
+ if (!response.ok) throw new Error(`${body.error || 'Request failed'} (${response.status})`);
+ return body;
+}
+async function refresh() {
+ const path = `/v1/ai/${encodeURIComponent(id())}`;
+ const [system, history, alerts, coverage] = await Promise.all([api(path), api(`${path}/timeline`), api(`${path}/alerts`), api(`${path}/coverage`)]);
+ $('#detail').replaceChildren(); $('#timeline').replaceChildren(); $('#alerts').replaceChildren(); $('#coverage').replaceChildren();
+ const heading = document.createElement('h3'); heading.textContent = `${system.name} — ${system.id}`; $('#detail').append(heading);
+ const note = document.createElement('p'); note.textContent = `Purpose: ${system.purpose}. Monitoring: ${system.monitoringStatus}. Compliance: ${system.compliance.state} — ${system.compliance.reason}`; $('#detail').append(note);
+ for (const source of coverage.sources) { const li = document.createElement('li'); li.className = 'coverage'; li.textContent = `${source.name}: ${source.state}${source.reason ? ` — ${source.reason}` : ''}`; $('#coverage').append(li); }
+ for (const alert of alerts.alerts) { const row = document.createElement('article'); row.className = 'critical'; row.textContent = `${alert.severity} · ${alert.createdAt} · ${alert.summary} · Claim ${alert.claimEventId} → result ${alert.resultEventId}`; $('#alerts').append(row); }
+ for (const item of history.events) { const li = document.createElement('li'); li.textContent = `${item.statement} State: ${item.state}. Event: ${item.id}${item.relatedEventId ? `. Related claim: ${item.relatedEventId}` : ''}`; $('#timeline').append(li); }
+ $('#activity').hidden = false;
+ status(`${history.events.length} recorded events, ${alerts.alerts.length} critical contradictions. Coverage is limited to the connected sources shown above.`);
+}
+$('#lookup').addEventListener('submit', async event => { event.preventDefault(); try { await refresh(); } catch (error) { status(error.message); } });
+$('#register').addEventListener('submit', async event => {
  event.preventDefault();
- const status = document.querySelector('#status');
- const detail = document.querySelector('#detail');
- const list = document.querySelector('#timeline');
- status.textContent = 'Loading…'; detail.replaceChildren(); list.replaceChildren();
- const id = encodeURIComponent(document.querySelector('#ai').value.trim());
- const headers = { 'x-api-key': document.querySelector('#key').value };
- try {
-  const [systemResponse, historyResponse] = await Promise.all([fetch(`/v1/ai/${id}`, { headers, cache: 'no-store' }), fetch(`/v1/ai/${id}/timeline`, { headers, cache: 'no-store' })]);
-  if (!systemResponse.ok || !historyResponse.ok) throw new Error(`Request failed (${systemResponse.status}/${historyResponse.status})`);
-  const system = await systemResponse.json(); const history = await historyResponse.json();
-  const heading = document.createElement('h2'); heading.textContent = system.name; detail.append(heading);
-  const coverage = document.createElement('p'); coverage.textContent = `Coverage: ${history.coverage}. Monitoring: ${system.monitoringStatus}. Compliance: ${system.compliance.state} — ${system.compliance.reason}`; detail.append(coverage);
-  for (const item of history.events) { const row = document.createElement('li'); row.textContent = item.statement; list.append(row); }
-  status.textContent = `${history.events.length} recorded events. Evidence hashes are references supplied by the source, not independently verified files.`;
- } catch (error) { status.textContent = error.message; }
+ try { const values = Object.fromEntries(new FormData(event.currentTarget)); const system = await api('/v1/ai', { method: 'POST', body: JSON.stringify(values) }); $('#ai').value = system.id; await refresh(); } catch (error) { status(error.message); }
 });
+$('#report').addEventListener('submit', async event => {
+ event.preventDefault();
+ try {
+  const values = Object.fromEntries(new FormData(event.currentTarget));
+  const bytes = new TextEncoder().encode(values.summary);
+  const hash = await crypto.subtle.digest('SHA-256', bytes);
+  const evidenceHash = [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  await api(`/v1/ai/${encodeURIComponent(id())}/events`, { method: 'POST', body: JSON.stringify({ ...values, sourceType: 'DECLARATION', occurredAt: new Date().toISOString(), evidenceHash }) });
+  event.currentTarget.reset(); await refresh();
+ } catch (error) { status(error.message); }
+});
+
+setInterval(() => { if (id() && key() && !document.hidden) refresh().catch(error => status(error.message)); }, 5000);
