@@ -9,7 +9,7 @@ The application intentionally fails closed at startup unless required production
 - [ ] HTTPS termination enabled at the trusted edge.
 - [ ] `PERSISTENT_STORAGE_CONFIRMED=true` set only when `UPLOAD_DIR` is backed by durable, access-controlled storage/volume.
 - [ ] Malware scanner deployed at `MALWARE_SCAN_URL`; it must accept uploaded bytes and return JSON `{ "clean": boolean }`.
-- [ ] `MALWARE_SCAN_TOKEN` configured and kept secret.
+- [ ] `MALWARE_SCAN_TOKEN` configured with the same secret on the app and scanner adapter; unauthenticated `/scan` returns 401.
 - [ ] Retention/deletion policy configured for uploaded media and verification records.
 - [ ] Database backups and a restore drill completed.
 

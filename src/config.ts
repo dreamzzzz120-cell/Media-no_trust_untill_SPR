@@ -14,6 +14,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (c.NODE_ENV === 'production' && !c.DELETE_SOURCE_AFTER_VERIFICATION) throw new Error('DELETE_SOURCE_AFTER_VERIFICATION=true is required in production');
   if (c.NODE_ENV === 'production' && !c.PERSISTENT_STORAGE_CONFIRMED) throw new Error('PERSISTENT_STORAGE_CONFIRMED=true is required in production');
   if (c.NODE_ENV === 'production' && !c.MALWARE_SCAN_URL) throw new Error('MALWARE_SCAN_URL is required in production');
+  if (c.NODE_ENV === 'production' && !c.MALWARE_SCAN_TOKEN) throw new Error('MALWARE_SCAN_TOKEN is required in production');
   if (c.MALWARE_SCAN_URL) { const url = new URL(c.MALWARE_SCAN_URL); const privateHttp = url.protocol === 'http:' && (url.hostname.endsWith('.railway.internal') || url.hostname === 'localhost'); if (c.NODE_ENV === 'production' && url.protocol !== 'https:' && !(c.MALWARE_SCAN_ALLOW_PRIVATE_HTTP && privateHttp)) throw new Error('MALWARE_SCAN_URL must use HTTPS unless private-network HTTP is explicitly enabled'); if (url.protocol === 'https:' && c.MALWARE_SCAN_TOKEN === undefined) throw new Error('MALWARE_SCAN_TOKEN is required for HTTPS scanner endpoints'); }
   return c;
 }

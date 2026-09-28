@@ -42,7 +42,14 @@ app.addHook('onRequest', async (req, reply) => {
 function auth(req: { mediaAuth: ApiIdentity | null }): ApiIdentity { if (!req.mediaAuth) throw new Error('UNAUTHORIZED'); return req.mediaAuth; }
 function requireRole(req: { mediaAuth: ApiIdentity | null }, reply: any, allowed: ApiRole[]): boolean { const identity = auth(req); if (!allowed.includes(identity.role)) { void reply.code(403).send({ error: 'FORBIDDEN' }); return false; } return true; }
 app.get('/health', async () => ({ status: 'ok', service: 'media-passport', version: '1.0.0' }));
-app.get('/ready', async (_req, reply) => { const databaseOk = await store.ready(); if (!databaseOk) return reply.code(503).send({ status: 'not_ready', database: { ok: false } }); return { status: 'ready', database: { ok: true }, trustEngine: { ok: true }, security: { uploadQuarantine: true, malwareScanRequired: config.NODE_ENV === 'production' } }; });
+app.get('/ready', async (_req, reply) => {
+  const databaseOk = await store.ready(); let scannerOk = false;
+  if (config.MALWARE_SCAN_URL) {
+    try { const endpoint = new URL('/ready', config.MALWARE_SCAN_URL); const response = await fetch(endpoint, { signal: AbortSignal.timeout(Math.min(config.MALWARE_SCAN_TIMEOUT_MS, 3000)) }); scannerOk = response.ok; } catch { scannerOk = false; }
+  }
+  if (!databaseOk || (config.NODE_ENV === 'production' && !scannerOk)) return reply.code(503).send({ status: 'not_ready', database: { ok: databaseOk }, scanner: { ok: scannerOk } });
+  return { status: 'ready', database: { ok: true }, scanner: { ok: scannerOk }, trustEngine: { ok: true } };
+});
 app.post('/v1/api-keys', async (req, reply) => { if (!requireRole(req, reply, ['super_admin','platform_admin','organization_admin'])) return; const identity = auth(req); const body = z.object({ organizationId: z.string().min(1), name: z.string().min(1).max(100), role: z.enum(roles as [ApiRole, ...ApiRole[]]) }).parse(req.body); if (identity.organizationId && identity.organizationId !== body.organizationId && identity.role !== 'super_admin' && identity.role !== 'platform_admin') return reply.code(403).send({ error: 'TENANT_MISMATCH' }); if (identity.role === 'organization_admin' && (body.role === 'super_admin' || body.role === 'platform_admin')) return reply.code(403).send({ error: 'ROLE_ESCALATION_DENIED' }); if (identity.role === 'platform_admin' && body.role === 'super_admin') return reply.code(403).send({ error: 'ROLE_ESCALATION_DENIED' }); const created = await store.createApiKey(body.organizationId, body.name, body.role); return reply.code(201).send({ ...created, warning: 'The secret is returned once. Store it securely.' }); });
 const verifyUpload = async (req: FastifyRequest, reply: FastifyReply) => {
   if (!requireRole(req, reply, ['creator','analyst','organization_admin','platform_admin','super_admin'])) return;
