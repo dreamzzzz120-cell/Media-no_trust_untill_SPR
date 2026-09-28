@@ -17,6 +17,7 @@ describe('AI flight recorder', () => {
   expect((await store.integrity('tenant-a', ai.id)).state).toBe('VALID_INTERNAL_CHAIN');
   expect(await store.timeline('tenant-b', ai.id)).toEqual([]);
   expect((await store.timeline('tenant-a', ai.id)).map(e => e.summary)).toEqual(['Agent requested a refund.', 'The refund was reported failed.']);
+  expect((await store.timeline('tenant-a', ai.id, first?.sequence, 1)).map(e => e.id)).toEqual([second?.id]);
   await store.close();
  });
 });
