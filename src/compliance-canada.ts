@@ -8,8 +8,8 @@ export function assessCanadaElectionRisk(record:VerificationRecord,c:CanadaElect
  if(c.coveredPersonOrAuthority&&synthetic)triggers.push('SYNTHETIC_ELECTION_PERSON_OR_AUTHORITY');
  if(c.intentToMislead==='YES')triggers.push('INTENT_TO_MISLEAD_ASSERTED'); else if(c.intentToMislead==='UNKNOWN')limitations.push('Intent to mislead cannot be established automatically.');
  if(c.authorizedSource==='NO')triggers.push('SOURCE_NOT_AUTHORIZED'); else if(c.authorizedSource==='UNKNOWN')limitations.push('Publication authorization is unknown.');
- if(triggers.length)actions.push('HUMAN_LEGAL_REVIEW_REQUIRED','PRESERVE_PROVENANCE_AND_SOURCE_EVIDENCE','DO_NOT_AUTO_DECLARE_LEGALITY');
- const status=actions.length?'HUMAN_REVIEW_REQUIRED':limitations.length?'UNKNOWN':'NO_TRIGGER_IDENTIFIED';
+ if(triggers.length)actions.push('HOLD','PRESERVE_PROVENANCE_AND_SOURCE_EVIDENCE','RESOLVE_REQUIRED_FACTS_BEFORE_RELEASE');
+ const status=actions.length?'HOLD':limitations.length?'HOLD':'NO_DISCLOSURE_REQUIRED';
  const base={status,triggers,actions,limitations,legalSources:['Canada Elections Act s. 480.1','Canada Elections Act s. 481'],assetSha256:record.asset.sha256};
  return {...base,digest:createHash('sha256').update(JSON.stringify(base)).digest('hex')};
 }
