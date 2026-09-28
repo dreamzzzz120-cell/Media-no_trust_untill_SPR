@@ -11,6 +11,7 @@ export interface AiAlert { id: string; aiId: string; claimEventId: string; resul
 export type EventInput = Pick<AiEvent, 'eventType' | 'sourceType' | 'source' | 'summary' | 'occurredAt' | 'evidenceHash'>;
 export interface ConfirmationInput { claimEventId: string; outcome: ExternalOutcome; source: string; occurredAt: string; evidenceHash: string; externalEventId: string }
 export interface AiStore {
+ ready(): Promise<boolean>;
  register(org: string, input: Pick<AiSystem, 'name' | 'purpose' | 'owner' | 'provider' | 'model'>): Promise<AiSystem>;
  get(org: string, id: string): Promise<AiSystem | null>;
  append(org: string, aiId: string, input: EventInput): Promise<AiEvent | null>;
@@ -33,6 +34,7 @@ function confirmation(aiId: string, claim: AiEvent, input: ConfirmationInput, pr
 export function createAiStore(url?: string): AiStore { return url ? new PgAiStore(postgres(url, { prepare: false })) : new MemoryAiStore(); }
 class MemoryAiStore implements AiStore {
  private systems = new Map<string, AiSystem>(); private events = new Map<string, AiEvent[]>(); private incidents = new Map<string, AiAlert[]>(); private confirmations = new Set<string>();
+ async ready() { return true; }
  async register(organizationId: string, input: Pick<AiSystem, 'name' | 'purpose' | 'owner' | 'provider' | 'model'>) { const system = { id: randomUUID(), organizationId, ...input, createdAt: new Date().toISOString() }; this.systems.set(system.id, system); return structuredClone(system); }
  async get(org: string, id: string) { const system = this.systems.get(id); return system?.organizationId === org ? structuredClone(system) : null; }
  async append(org: string, aiId: string, input: EventInput) { if (!await this.get(org, aiId)) return null; const events = this.events.get(aiId) ?? []; const event = makeEvent(aiId, input, events.at(-1)?.eventHash ?? null); events.push(event); this.events.set(aiId, events); return structuredClone(event); }
@@ -59,6 +61,7 @@ const eventFromRow = (r: EventRow): AiEvent => ({ id:r.id, aiId:r.ai_identity_id
 const alertFromRow = (r: AlertRow): AiAlert => ({ id:r.id, aiId:r.ai_identity_id, claimEventId:r.claim_event_id, resultEventId:r.result_event_id, severity:r.severity, summary:r.summary, createdAt:r.created_at.toISOString() });
 class PgAiStore implements AiStore {
  constructor(private sql: postgres.Sql) {}
+ async ready() { try { await this.sql`SELECT 1 FROM ai_identities LIMIT 0`; await this.sql`SELECT 1 FROM flight_records LIMIT 0`; await this.sql`SELECT 1 FROM evidence_ledger LIMIT 0`; await this.sql`SELECT 1 FROM ai_alerts LIMIT 0`; return true; } catch { return false; } }
  async register(org: string, input: Pick<AiSystem, 'name' | 'purpose' | 'owner' | 'provider' | 'model'>) {
   const rows = await this.sql<SystemRow[]>`INSERT INTO ai_identities(id, organization_id, name, purpose, owner, provider, model) VALUES (${randomUUID()}, ${org}, ${input.name}, ${input.purpose}, ${input.owner}, ${input.provider}, ${input.model}) RETURNING *`;
   if (!rows[0]) throw new Error('AI_REGISTRATION_FAILED'); return systemFromRow(rows[0]);
