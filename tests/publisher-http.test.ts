@@ -51,5 +51,9 @@ describe('publisher HTTP flow', () => {
     expect((await json(`/v1/media/${id}`, keyB)).status).toBe(404);
     expect((await json(`/v1/media/${id}/evidence`, keyB)).status).toBe(404);
     expect((await json('/v1/recommendation/evaluate', keyB, { method: 'POST', body: JSON.stringify({ passportId: id }), headers: { 'content-type': 'application/json' } })).status).toBe(404);
+    expect((await fetch(`${url}/public/${id}`)).status).toBe(404);
+    expect((await fetch(`${url}/passport/${id}`)).status).toBe(404);
+    expect((await json(`/v1/media/${id}/appeal`, keyA, { method: 'POST', body: JSON.stringify({ reason: 'Please review this decision' }), headers: { 'content-type': 'application/json' } })).status).toBe(503);
+    expect((await json(`/v1/media/${id}/report`, keyA, { method: 'POST', body: JSON.stringify({ category: 'other', description: 'Please investigate this artifact' }), headers: { 'content-type': 'application/json' } })).status).toBe(503);
   });
 });
