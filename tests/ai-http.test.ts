@@ -30,6 +30,7 @@ it('registers, records, rejects forgery and cross-tenant access, then shows a ve
  const aiReady = await fetch(url + '/ready/ai'); expect(aiReady.status).toBe(200); expect((await aiReady.json()).scope).toBe('ai_registry_and_event_api');
  const system = await request('/v1/ai', keyA, { name:'Refund agent', purpose:'Customer support' }); expect(system.status).toBe(201);
  const id=system.body.id as string;
+ expect((await request('/v1/ai/not-a-uuid',keyA)).status).toBe(404);
  expect((await request(`/v1/ai/${id}`, keyB)).status).toBe(404);
  expect((await request(`/v1/ai/${id}/timeline`, keyB)).status).toBe(404);
  const claim = await request(`/v1/ai/${id}/events`, keyA, { eventType:'OUTPUT', sourceType:'DECLARATION', source:'agent wrapper', summary:'Refund completed', occurredAt:'2026-09-28T20:00:00Z', evidenceHash:createHash('sha256').update('Refund completed').digest('hex') });
