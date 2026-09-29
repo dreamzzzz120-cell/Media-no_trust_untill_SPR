@@ -8,3 +8,6 @@ describe('governed execution',()=>{
  it('records observed failure when authorized executor throws',async()=>{const x=vi.fn(async()=>{throw Error('provider failed')});const r=await executeGoverned(req('AUTHORIZED'),x);expect(r.outcome).toBe('OBSERVED_FAILED')});
  it('does not store raw payload in receipt',async()=>{const r=await executeGoverned(req('AUTHORIZED'),async()=>{});expect(r).not.toHaveProperty('payload');expect(r.payloadDigest).toMatch(/^[a-f0-9]{64}$/)});
 });
+
+it('hashes payload canonically regardless of object key order',async()=>{const a=await executeGoverned({...req('AUTHORIZED'),payload:{a:1,b:2}},async()=>{});const b=await executeGoverned({...req('AUTHORIZED'),payload:{b:2,a:1}},async()=>{});expect(a.payloadDigest).toBe(b.payloadDigest)});
+it('seals every receipt with a sha256 digest',async()=>{const r=await executeGoverned({...req('UNKNOWN'),idempotencyKey:'job-1'},async()=>{});expect(r.receiptDigest).toMatch(/^[a-f0-9]{64}$/);expect(r.idempotencyKey).toBe('job-1')});
