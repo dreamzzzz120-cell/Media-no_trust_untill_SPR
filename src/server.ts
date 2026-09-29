@@ -13,6 +13,7 @@ import { createStore, type ApiIdentity, type ApiRole } from './db.js';
 import { verifyMedia } from './verification/engine.js';
 import { deleteStoredMedia, promoteStoredMedia, storeUpload } from './storage.js';
 import { scanForMalware } from './security/malware.js';
+import { scannerReady } from './security/scanner-readiness.js';
 import { canReadTenantRecord } from './tenant.js';
 import { createAiStore } from './ai.js';
 import { createConstellationStore } from './constellation.js';
@@ -63,9 +64,7 @@ function requireRole(req: { mediaAuth: ApiIdentity | null }, reply: any, allowed
 app.get('/health', async () => ({ status: 'ok', service: 'media-passport', version: '1.0.0' }));
 app.get('/ready', async (_req, reply) => {
   const databaseOk = await store.ready(); const evidenceOk=await kernelStore.ready(); const inventoryOk=await inventoryStore.ready(); const governanceOk=await governanceStore.ready(); let scannerOk = false;
-  if (config.MALWARE_SCAN_URL) {
-    try { const endpoint = new URL('/ready', config.MALWARE_SCAN_URL); const response = await fetch(endpoint, { signal: AbortSignal.timeout(Math.min(config.MALWARE_SCAN_TIMEOUT_MS, 3000)) }); scannerOk = response.ok; } catch { scannerOk = false; }
-  }
+  scannerOk = await scannerReady(config.MALWARE_SCAN_URL,config.MALWARE_SCAN_TOKEN,config.MALWARE_SCAN_TIMEOUT_MS);
   if (!databaseOk || !evidenceOk || !inventoryOk || !governanceOk || (config.NODE_ENV === 'production' && !scannerOk)) return reply.code(503).send({ status: 'not_ready', database: { ok: databaseOk }, evidence:{ok:evidenceOk}, inventory:{ok:inventoryOk}, governance:{ok:governanceOk}, scanner: { ok: scannerOk } });
   return { status: 'ready', database: { ok: true }, evidence:{ok:true}, inventory:{ok:true}, governance:{ok:true}, scanner: { ok: scannerOk }, trustEngine: { ok: true } };
 });
@@ -173,6 +172,7 @@ const verifyUpload = async (req: FastifyRequest, reply: FastifyReply) => {
   if (!requireRole(req, reply, ['creator','analyst','organization_admin','platform_admin','super_admin'])) return;
   const identity = auth(req); if (req.url === '/v1/publisher/verify' && !identity.organizationId) return reply.code(403).send({ error: 'PUBLISHER_KEY_REQUIRED' }); const declaredHeader = String(req.headers['x-declared-ai-use'] ?? 'UNKNOWN').toUpperCase(); const declaredAiUse = (aiStatuses as readonly string[]).includes(declaredHeader) ? declaredHeader as typeof aiStatuses[number] : 'UNKNOWN';
   const creatorHeader = req.headers['x-creator-id']; const creatorId = typeof creatorHeader === 'string' && idPattern.test(creatorHeader) ? creatorHeader : undefined;
+  const scannerOk=await scannerReady(config.MALWARE_SCAN_URL,config.MALWARE_SCAN_TOKEN,config.MALWARE_SCAN_TIMEOUT_MS); if(!scannerOk){req.log.warn({state:'BLOCKED_UNVERIFIED'},'upload rejected because malware scanner is unavailable');return reply.code(503).send({error:'BLOCKED_UNVERIFIED',state:'BLOCKED_UNVERIFIED',reason:'MALWARE_SCANNER_UNAVAILABLE'});}
   const part = await req.file({ limits: { fileSize: config.MAX_UPLOAD_BYTES } }); if (!part) return reply.code(400).send({ error: 'FILE_REQUIRED' });
   const declared = (part.mimetype || 'application/octet-stream').split(';')[0]?.toLowerCase() || 'application/octet-stream';
   const upload = await storeUpload(part.file, part.filename, declared, config.UPLOAD_DIR, config.MAX_UPLOAD_BYTES);
