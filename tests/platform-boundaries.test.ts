@@ -1,0 +1,1 @@
+import{expect,it}from'vitest';import{onboardingStatus,money}from'../src/platform.js';it('unknown cost has no invented amount',()=>expect(money('UNKNOWN',null,null,'not observed',[]).amountMinor).toBeNull());it('onboarding remains blocked when collector is absent',()=>expect(onboardingStatus({api:true},['api','collector']).status).toBe('BLOCKED'));
