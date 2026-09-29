@@ -1,9 +1,10 @@
+import { actionAuthorityPolicy } from './action-authority-policy.js';
 import { randomUUID } from 'node:crypto';
 
 export type AuthorityDecision='AUTHORIZED'|'NOT_AUTHORIZED'|'UNKNOWN';
 export interface AuthorityInput {
  actorEntityId:string; actionType:string; targetResourceId?:string|null;
- license?:{id:string;licenseClass:number;validFrom:string;validUntil?:string|null;evidenceHash:string}|null;
+ license?:{id:string;licenseClass:number;endorsements?:string[];scope?:{actionTypes?:string[];resourceIds?:string[]}|null;validFrom:string;validUntil?:string|null;evidenceHash:string}|null;
  mission?:{id:string;maxLicenseClass:number;startsAt:string;expiresAt:string;endedAt?:string|null;evidenceHash:string}|null;
  approval?:{required:boolean;decision?:'APPROVED'|'DENIED'|'UNKNOWN';validUntil?:string|null;evidenceHash?:string|null}|null;
  authorityStatus?:'ACTIVE'|'EXPIRED'|'REVOKED'|'SUSPENDED'|'UNKNOWN';
@@ -24,6 +25,11 @@ export function evaluateAuthority(i:AuthorityInput):AuthorityResult {
  if(t<Date.parse(i.license.validFrom)||(i.license.validUntil&&t>=Date.parse(i.license.validUntil))) reasons.push('LICENCE_OUTSIDE_VALIDITY');
  if(t<Date.parse(i.mission.startsAt)||t>=Date.parse(i.mission.expiresAt)||i.mission.endedAt) reasons.push('MISSION_INACTIVE');
  if(i.license.licenseClass>i.mission.maxLicenseClass) reasons.push('LICENCE_EXCEEDS_MISSION');
+ const policy=actionAuthorityPolicy(i.actionType);
+ if(!policy) unknowns.push('ACTION_AUTHORITY_POLICY_NOT_ESTABLISHED');
+ else {if(i.license.licenseClass<policy.minimumClass) reasons.push('LICENCE_CLASS_INSUFFICIENT');const e=i.license.endorsements??[];if(policy.requiredEndorsements.some(x=>!e.includes(x)))reasons.push('REQUIRED_ENDORSEMENT_MISSING')}
+ if(i.license.scope?.actionTypes&&!i.license.scope.actionTypes.includes(i.actionType))reasons.push('ACTION_OUTSIDE_LICENCE_SCOPE');
+ if(i.targetResourceId&&i.license.scope?.resourceIds&&!i.license.scope.resourceIds.includes(i.targetResourceId))reasons.push('RESOURCE_OUTSIDE_LICENCE_SCOPE');
  if(i.approval?.required){
    if(i.approval.decision==='DENIED') reasons.push('APPROVAL_DENIED');
    else if(i.approval.decision!=='APPROVED'||!validHash(i.approval.evidenceHash)||(i.approval.validUntil&&t>=Date.parse(i.approval.validUntil)))
