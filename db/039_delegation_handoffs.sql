@@ -36,3 +36,23 @@ CREATE INDEX universe_delegation_child_idx ON universe_delegations(organization_
 CREATE OR REPLACE FUNCTION reject_delegation_history_mutation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'delegation evidence is append-only'; END $$;
 CREATE TRIGGER universe_delegations_immutable BEFORE UPDATE OR DELETE ON universe_delegations FOR EACH ROW EXECUTE FUNCTION reject_delegation_history_mutation();
 CREATE TRIGGER universe_handoff_receipts_immutable BEFORE UPDATE OR DELETE ON universe_handoff_receipts FOR EACH ROW EXECUTE FUNCTION reject_delegation_history_mutation();
+
+CREATE OR REPLACE FUNCTION enforce_delegation_bounds() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE parent_class SMALLINT; child_class SMALLINT;
+BEGIN
+ SELECT license_class INTO parent_class FROM universe_licenses WHERE id=NEW.parent_license_id AND organization_id=NEW.organization_id;
+ SELECT license_class INTO child_class FROM universe_licenses WHERE id=NEW.child_license_id AND organization_id=NEW.organization_id;
+ IF parent_class IS NULL OR child_class IS NULL THEN RAISE EXCEPTION 'delegation licence authority not established'; END IF;
+ IF parent_class < 6 THEN RAISE EXCEPTION 'parent licence cannot delegate authority'; END IF;
+ IF NEW.delegated_class > parent_class OR child_class > NEW.delegated_class THEN RAISE EXCEPTION 'delegated authority exceeds parent grant'; END IF;
+ IF EXISTS (
+  WITH RECURSIVE chain(id) AS (
+   SELECT NEW.child_entity_id
+   UNION
+   SELECT d.child_entity_id FROM universe_delegations d JOIN chain c ON d.parent_entity_id=c.id
+   WHERE d.organization_id=NEW.organization_id
+  ) SELECT 1 FROM chain WHERE id=NEW.parent_entity_id
+ ) THEN RAISE EXCEPTION 'delegation cycle rejected'; END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER universe_delegation_bounds BEFORE INSERT ON universe_delegations FOR EACH ROW EXECUTE FUNCTION enforce_delegation_bounds();
