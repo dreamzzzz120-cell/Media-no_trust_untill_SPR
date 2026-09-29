@@ -8,6 +8,13 @@ The tenant-scoped AI activity and evidence API extends the media pipeline. Open 
 
 Media Passport is an independent **identity + evidence layer for digital media**. It supports video, images and audio intake today and defines a common trust model for additional media types.
 
+
+## Observable observers
+
+AI evidence now has a first-class observer model. Tenant-scoped observers describe who or what collected evidence, how it was collected, the observer's authority scope, signing identity, health, and verification time. Evidence traces can expose the observer and explicitly report when that provenance is missing. See `docs/observable-observers.md`.
+
+Core rule: **Every observation must itself be observable.**
+
 ## The bigger product
 
 Media Passport is designed to sit above the media ecosystem rather than compete with it.
