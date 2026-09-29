@@ -48,6 +48,7 @@ describe('publisher HTTP flow', () => {
     expect(result.status).toBe(201); expect(result.body.passportId).toBeTruthy();
     expect(result.body.assetSha256).toMatch(/^[a-f0-9]{64}$/);
     expect(Array.isArray(result.body.evidence)).toBe(true);
+    const bindings=await json(`/v1/evidence/bindings/MEDIA/${result.body.passportId}`,keyA); expect(bindings.status).toBe(200); expect(Array.isArray(bindings.body.bindings)).toBe(true); expect((bindings.body.bindings as unknown[]).length).toBeGreaterThan(0);
     const id = result.body.passportId;
     expect((await json(`/v1/media/${id}`, keyA)).status).toBe(200);
     expect((await json(`/v1/media/${id}`, keyB)).status).toBe(404);
@@ -55,3 +56,5 @@ describe('publisher HTTP flow', () => {
     expect((await json('/v1/recommendation/evaluate', keyB, { method: 'POST', body: JSON.stringify({ passportId: id }), headers: { 'content-type': 'application/json' } })).status).toBe(404);
   });
 });
+
+describe('publisher retry contract',()=>{it('binds an idempotency key to identical content and rejects reuse for different bytes',async()=>{const key='publisher-retry-contract-1';const one=new FormData();one.append('file',new Blob([png],{type:'image/png'}),'one.png');const first=await json('/v1/publisher/verify',keyA,{method:'POST',body:one,headers:{'idempotency-key':key}});expect(first.status).toBe(201);const two=new FormData();two.append('file',new Blob([Buffer.concat([png,Buffer.from('different')])],{type:'image/png'}),'two.png');const second=await json('/v1/publisher/verify',keyA,{method:'POST',body:two,headers:{'idempotency-key':key}});expect(second.status).not.toBe(201);});});
