@@ -21,7 +21,8 @@ CREATE TABLE astronomical_corps_assignments (
  FOREIGN KEY(entity_id,organization_id) REFERENCES constellation_entities(id,organization_id) ON DELETE RESTRICT,
  FOREIGN KEY(mission_id,organization_id) REFERENCES universe_missions(id,organization_id) ON DELETE RESTRICT,
  FOREIGN KEY(license_id,organization_id) REFERENCES universe_licenses(id,organization_id) ON DELETE RESTRICT,
- CHECK(expires_at>starts_at)
+ CHECK(expires_at>starts_at),
+ CHECK(assignment_kind='HUMAN' OR (mission_id IS NOT NULL AND license_id IS NOT NULL))
 );
 CREATE INDEX astronomical_corps_assignment_entity_idx ON astronomical_corps_assignments(organization_id,entity_id,expires_at DESC);
 CREATE OR REPLACE FUNCTION reject_corps_history_mutation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'astronomical corps evidence is append-only'; END $$;
