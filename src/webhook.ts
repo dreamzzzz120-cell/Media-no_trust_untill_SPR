@@ -1,0 +1,4 @@
+import{createHmac,timingSafeEqual}from'node:crypto';import{canonical}from'./observation.js';
+export function signWebhook(secret:string,payload:unknown,timestamp:string){if(secret.length<32)throw Error('WEAK_WEBHOOK_SECRET');return createHmac('sha256',secret).update(timestamp+'\n'+canonical(payload)).digest('hex')}
+export function verifyWebhook(secret:string,payload:unknown,timestamp:string,signature:string,now=Date.now(),maxAgeMs=300000){if(!/^[a-f0-9]{64}$/.test(signature))return false;const t=Date.parse(timestamp);if(!Number.isFinite(t)||Math.abs(now-t)>maxAgeMs)return false;const expected=Buffer.from(signWebhook(secret,payload,timestamp),'hex'),actual=Buffer.from(signature,'hex');return expected.length===actual.length&&timingSafeEqual(expected,actual)}
+export function retryDelay(attempt:number){if(!Number.isInteger(attempt)||attempt<1)throw Error('INVALID_ATTEMPT');return Math.min(3600000,1000*2**Math.min(attempt-1,12))}
