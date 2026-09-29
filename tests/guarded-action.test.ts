@@ -3,6 +3,6 @@ const store=(decision:'AUTHORIZED'|'NOT_AUTHORIZED'|'UNKNOWN'):AuthorityStore=>(
 const a={organizationId:'org',actorEntityId:'actor',missionId:'mission',actionType:'SEND',payload:{secret:'x'}};
 describe('guarded action',()=>{
  it('executes only after persisted authority authorizes',async()=>{const x=vi.fn(async()=>{});const r=await runGuardedAction(store('AUTHORIZED'),a,x);expect(x).toHaveBeenCalledOnce();expect(r.outcome).toBe('OBSERVED_SUCCEEDED')});
- it('blocks explicit denial without invoking side effect',async()=>{const x=vi.fn(async()=>{});const r=await runGuardedAction(store('NOT_AUTHORIZED'),a,x);expect(x).not.toHaveBeenCalled();expect(r.outcome).toBe('BLOCKED')});
+ it('blocks explicit denial without invoking side effect',async()=>{const x=vi.fn(async()=>{});const r=await runGuardedAction(store('NOT_AUTHORIZED'),a,x);expect(x).not.toHaveBeenCalled();expect(r.outcome).toBe('DENIED_NOT_EXECUTED')});
  it('holds unknown authority without invoking side effect',async()=>{const x=vi.fn(async()=>{});const r=await runGuardedAction(store('UNKNOWN'),a,x);expect(x).not.toHaveBeenCalled();expect(r.outcome).toBe('UNKNOWN')});
 });
