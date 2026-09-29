@@ -15,11 +15,13 @@ import { deleteStoredMedia, storeUpload } from './storage.js';
 import { scanForMalware } from './security/malware.js';
 import { canReadTenantRecord } from './tenant.js';
 import { createAiStore } from './ai.js';
+import { createObserverStore } from './observers.js';
 
 const config = loadConfig();
 const app = Fastify({ logger: { level: config.LOG_LEVEL, redact: ['req.headers.authorization', 'req.headers.x-api-key', 'headers.x-api-key'] }, bodyLimit: config.MAX_UPLOAD_BYTES, requestTimeout: config.REQUEST_TIMEOUT_MS, trustProxy: config.TRUST_PROXY });
 const store = createStore(config.DATABASE_URL);
 const aiStore = createAiStore(config.DATABASE_URL);
+const observerStore = createObserverStore(config.DATABASE_URL);
 const idPattern = /^[A-Za-z0-9_-]{10,40}$/;
 const roles: ApiRole[] = ['viewer','creator','reviewer','moderator','analyst','organization_admin','platform_admin','super_admin'];
 const aiStatuses = ['NONE','AI_ASSISTED','AI_EDITED','AI_GENERATED','AI_SYNTHETIC_PERSON','AI_SYNTHETIC_VOICE','AI_DEEPFAKE','UNKNOWN'] as const;
@@ -60,6 +62,31 @@ app.post('/v1/organizations', async (req, reply) => { if (!requireRole(req, repl
 app.post('/v1/api-keys', async (req, reply) => { if (!requireRole(req, reply, ['super_admin','platform_admin','organization_admin'])) return; const identity = auth(req); const body = z.object({ organizationId: z.string().min(1), name: z.string().min(1).max(100), role: z.enum(roles as [ApiRole, ...ApiRole[]]) }).parse(req.body); if (identity.organizationId && identity.organizationId !== body.organizationId && identity.role !== 'super_admin' && identity.role !== 'platform_admin') return reply.code(403).send({ error: 'TENANT_MISMATCH' }); if (identity.role === 'organization_admin' && (body.role === 'super_admin' || body.role === 'platform_admin')) return reply.code(403).send({ error: 'ROLE_ESCALATION_DENIED' }); if (identity.role === 'platform_admin' && body.role === 'super_admin') return reply.code(403).send({ error: 'ROLE_ESCALATION_DENIED' }); const created = await store.createApiKey(body.organizationId, body.name, body.role); return reply.code(201).send({ ...created, warning: 'The secret is returned once. Store it securely.' }); });
 const aiWriterRoles: ApiRole[] = ['analyst','organization_admin','platform_admin','super_admin'];
 function tenant(req: FastifyRequest, reply: FastifyReply): string | null { const id = auth(req).organizationId; if (!id) { void reply.code(403).send({ error: 'TENANT_KEY_REQUIRED' }); return null; } return id; }
+app.post('/v1/observers', async (req, reply) => {
+ if (!requireRole(req, reply, ['organization_admin','platform_admin','super_admin'])) return;
+ const organizationId = tenant(req, reply); if (!organizationId) return;
+ const body = z.object({
+  name: z.string().trim().min(1).max(120),
+  observerType: z.enum(['CONNECTOR','GATEWAY','AUDIT_LOG','SCANNER','PROVIDER','HUMAN','OTHER']),
+  version: z.string().max(120).nullable().default(null),
+  collectionMethod: z.string().trim().min(1).max(500),
+  authorityScope: z.string().trim().min(1).max(500),
+  signingIdentity: z.string().max(200).nullable().default(null),
+  healthState: z.enum(['HEALTHY','DEGRADED','UNAVAILABLE','UNKNOWN']).default('UNKNOWN'),
+  lastVerifiedAt: z.iso.datetime({ offset: true }).nullable().default(null)
+ }).parse(req.body);
+ return reply.code(201).send(await observerStore.register(organizationId, body));
+});
+app.get('/v1/observers/:id', async (req, reply) => {
+ const organizationId = tenant(req, reply); if (!organizationId) return;
+ const observer = await observerStore.get(organizationId, (req.params as { id:string }).id);
+ return observer ? observer : reply.code(404).send({ error:'NOT_FOUND' });
+});
+app.get('/v1/evidence/events/:eventId/trace', async (req, reply) => {
+ const organizationId = tenant(req, reply); if (!organizationId) return;
+ const trace = await observerStore.trace(organizationId, (req.params as { eventId:string }).eventId);
+ return trace ? trace : reply.code(404).send({ error:'NOT_FOUND' });
+});
 app.post('/v1/ai', async (req, reply) => {
  if (!requireRole(req, reply, aiWriterRoles)) return;
  const organizationId = tenant(req, reply); if (!organizationId) return;
