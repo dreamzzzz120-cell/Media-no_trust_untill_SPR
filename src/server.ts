@@ -16,12 +16,14 @@ import { scanForMalware } from './security/malware.js';
 import { canReadTenantRecord } from './tenant.js';
 import { createAiStore } from './ai.js';
 import { createObserverStore } from './observers.js';
+import { createDecisionStore } from './decisions.js';
 
 const config = loadConfig();
 const app = Fastify({ logger: { level: config.LOG_LEVEL, redact: ['req.headers.authorization', 'req.headers.x-api-key', 'headers.x-api-key'] }, bodyLimit: config.MAX_UPLOAD_BYTES, requestTimeout: config.REQUEST_TIMEOUT_MS, trustProxy: config.TRUST_PROXY });
 const store = createStore(config.DATABASE_URL);
 const aiStore = createAiStore(config.DATABASE_URL);
 const observerStore = createObserverStore(config.DATABASE_URL);
+const decisionStore = createDecisionStore(config.DATABASE_URL);
 const idPattern = /^[A-Za-z0-9_-]{10,40}$/;
 const roles: ApiRole[] = ['viewer','creator','reviewer','moderator','analyst','organization_admin','platform_admin','super_admin'];
 const aiStatuses = ['NONE','AI_ASSISTED','AI_EDITED','AI_GENERATED','AI_SYNTHETIC_PERSON','AI_SYNTHETIC_VOICE','AI_DEEPFAKE','UNKNOWN'] as const;
@@ -86,6 +88,20 @@ app.get('/v1/evidence/events/:eventId/trace', async (req, reply) => {
  const organizationId = tenant(req, reply); if (!organizationId) return;
  const trace = await observerStore.trace(organizationId, (req.params as { eventId:string }).eventId);
  return trace ? trace : reply.code(404).send({ error:'NOT_FOUND' });
+});
+app.post('/v1/ai/:id/decisions', async (req, reply) => {
+ if (!requireRole(req, reply, aiWriterRoles)) return;
+ const organizationId=tenant(req,reply); if(!organizationId)return;
+ const aiId=(req.params as {id:string}).id;
+ if(!await aiStore.get(organizationId,aiId))return reply.code(404).send({error:'NOT_FOUND'});
+ const body=z.object({actionEventId:z.uuid().nullable().default(null),decision:z.enum(['ALLOW','FLAG','REQUIRE_HUMAN','BLOCK']),decisionMode:z.enum(['POLICY','BOUNDARY','RISK_SIGNAL','HUMAN','COMBINED']),reason:z.string().trim().min(1).max(2000),policyId:z.string().max(200).nullable().default(null),policyVersion:z.string().max(100).nullable().default(null),boundaryId:z.string().max(200).nullable().default(null),boundaryVersion:z.string().max(100).nullable().default(null),evidenceSnapshot:z.array(z.string().max(500)).max(100).default([]),riskSignals:z.array(z.string().max(500)).max(100).default([]),humanState:z.enum(['NOT_REQUIRED','PENDING','APPROVED','DENIED']).default('NOT_REQUIRED'),humanActor:z.string().max(200).nullable().default(null),decidedAt:z.iso.datetime({offset:true})}).parse(req.body);
+ return reply.code(201).send(await decisionStore.append(organizationId,{aiId,...body}));
+});
+app.get('/v1/ai/:id/decisions', async (req, reply) => {
+ const organizationId=tenant(req,reply); if(!organizationId)return;
+ const aiId=(req.params as {id:string}).id;
+ if(!await aiStore.get(organizationId,aiId))return reply.code(404).send({error:'NOT_FOUND'});
+ return {aiId,decisions:await decisionStore.timeline(organizationId,aiId)};
 });
 app.post('/v1/ai', async (req, reply) => {
  if (!requireRole(req, reply, aiWriterRoles)) return;
@@ -192,5 +208,5 @@ app.post('/v1/recommendation/evaluate', async (req, reply) => { if (!requireRole
 app.get('/public/:id', async (req, reply) => { const record = await getRecord((req.params as { id: string }).id, reply); if (!record) return; return { passportId: record.asset.id, asset: { sha256: record.asset.sha256, mime: record.asset.mime, kind: record.asset.kind, sizeBytes: record.asset.sizeBytes }, decision: record.decision, trustScore: record.trustScore, confidence: record.confidence, aiStatus: record.aiStatus, provenance: { status: record.provenance.status, embedded: record.provenance.embedded, trusted: record.provenance.trusted }, evidence: record.observations, limitations: record.limitations }; });
 app.get('/passport/:id', async (req, reply) => { const record = await getRecord((req.params as { id: string }).id, reply); if (!record) return; const esc = (v: unknown) => String(v).replace(/[&<>\"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;' }[c] ?? c)); const evidence = record.observations.map((o) => `<li><strong>${esc(o.signal)}</strong>: ${esc(o.result)} — ${esc(o.details ?? '')}</li>`).join(''); const vector = Object.entries(record.trustVector).map(([k,v]) => `<li><strong>${esc(k)}</strong>: ${esc(v)}</li>`).join(''); const limitations = record.limitations.map((x) => `<li>${esc(x)}</li>`).join(''); return reply.type('text/html').send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer"><link rel="stylesheet" href="/passport.css"><title>Media Passport ${esc(record.asset.id)}</title></head><body><main><h1>Media Passport</h1><section><h2>${esc(record.decision)}</h2><p>Trust score: <strong>${esc(record.trustScore ?? 'N/A')}</strong> · Confidence: <strong>${esc(Math.round(record.confidence * 100))}%</strong></p><p>AI status: ${esc(record.aiStatus)} · Provenance: ${esc(record.provenance.status)}</p><p>SHA-256: <code>${esc(record.asset.sha256)}</code></p></section><section><h2>Trust Vector</h2><ul>${vector}</ul></section><section><h2>Evidence Explorer</h2><ul>${evidence || '<li>No additional evidence.</li>'}</ul></section><section><h2>Limitations</h2><ul>${limitations}</ul></section></main></body></html>`); });
 app.setErrorHandler((error, req, reply) => { if (error instanceof z.ZodError) return reply.code(400).send({ error: 'INVALID_REQUEST', issues: error.issues }); const message = error instanceof Error ? error.message : String(error); if ((error as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE' || message === 'UPLOAD_TOO_LARGE') return reply.code(413).send({ error: 'UPLOAD_TOO_LARGE' }); if (message === 'UNSUPPORTED_MEDIA_TYPE') return reply.code(415).send({ error: message }); if (message === 'MIME_MISMATCH') return reply.code(400).send({ error: message }); req.log.error({ err: error }, 'request failed'); return reply.code(500).send({ error: 'INTERNAL_ERROR' }); });
-const shutdown = async (signal: string) => { app.log.info({ signal }, 'shutting down'); await app.close(); await store.close(); await aiStore.close(); process.exit(0); };
+const shutdown = async (signal: string) => { app.log.info({ signal }, 'shutting down'); await app.close(); await store.close(); await aiStore.close(); await observerStore.close(); await decisionStore.close(); process.exit(0); };
 process.once('SIGTERM', () => void shutdown('SIGTERM')); process.once('SIGINT', () => void shutdown('SIGINT')); await app.listen({ host: config.HOST, port: config.PORT });
