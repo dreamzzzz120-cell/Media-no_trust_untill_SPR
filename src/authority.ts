@@ -36,3 +36,10 @@ export function evaluateAuthority(i:AuthorityInput):AuthorityResult {
  if(i.authorityStatus==='UNKNOWN'||i.authorityStatus===undefined) return {id:randomUUID(),decision:'UNKNOWN',reasons:['AUTHORITY_STATUS_NOT_ESTABLISHED'],evaluatedAt:at};
  return {id:randomUUID(),decision:reasons.length?'NOT_AUTHORIZED':'AUTHORIZED',reasons:reasons.length?reasons:['AUTHORITY_ESTABLISHED'],evaluatedAt:at};
 }
+
+export type ExecutionGate='ALLOW_EXECUTION'|'DENY_EXECUTION'|'HOLD_UNKNOWN';
+export function executionGate(result:AuthorityResult):ExecutionGate {
+ if(result.decision==='AUTHORIZED') return 'ALLOW_EXECUTION';
+ if(result.decision==='NOT_AUTHORIZED') return 'DENY_EXECUTION';
+ return 'HOLD_UNKNOWN';
+}
