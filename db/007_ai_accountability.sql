@@ -8,7 +8,8 @@ CREATE TABLE ai_accountability_entries (
  attribution TEXT NOT NULL CHECK(attribution IN ('AI','HUMAN','TOOL','INTEGRATION','EXTERNAL','MIXED','UNKNOWN')),
  evidence_hash CHAR(64) NOT NULL, source TEXT NOT NULL, occurred_at TIMESTAMPTZ NOT NULL,
  calculation JSONB NOT NULL DEFAULT '{}'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
- FOREIGN KEY(ai_id,organization_id) REFERENCES ai_systems(id,organization_id)
+ FOREIGN KEY(ai_id,organization_id) REFERENCES ai_identities(id,organization_id),
+ FOREIGN KEY(event_id,organization_id) REFERENCES flight_records(id,organization_id)
 );
 CREATE INDEX ai_accountability_tenant_ai_time_idx ON ai_accountability_entries(organization_id,ai_id,occurred_at DESC,id);
 CREATE OR REPLACE FUNCTION reject_accountability_mutation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'accountability ledger is append-only'; END $$;
