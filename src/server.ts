@@ -18,6 +18,8 @@ import { createAiStore } from './ai.js';
 import { createConstellationStore } from './constellation.js';
 import { createAccountabilityStore } from './accountability.js';
 import { createKernelStore } from './evidence-store.js';
+import { createInventoryStore } from './inventory-store.js';
+import { createGovernanceStore } from './governance-store.js';
 
 const config = loadConfig();
 const app = Fastify({ logger: { level: config.LOG_LEVEL, redact: ['req.headers.authorization', 'req.headers.x-api-key', 'headers.x-api-key'] }, bodyLimit: config.MAX_UPLOAD_BYTES, requestTimeout: config.REQUEST_TIMEOUT_MS, trustProxy: config.TRUST_PROXY });
@@ -26,6 +28,8 @@ const aiStore = createAiStore(config.DATABASE_URL);
 const constellationStore = createConstellationStore(config.DATABASE_URL);
 const accountabilityStore = createAccountabilityStore(config.DATABASE_URL);
 const kernelStore = createKernelStore(config.DATABASE_URL);
+const inventoryStore = createInventoryStore(config.DATABASE_URL);
+const governanceStore = createGovernanceStore(config.DATABASE_URL);
 const idPattern = /^[A-Za-z0-9_-]{10,40}$/;
 const roles: ApiRole[] = ['viewer','creator','reviewer','moderator','analyst','organization_admin','platform_admin','super_admin'];
 const aiStatuses = ['NONE','AI_ASSISTED','AI_EDITED','AI_GENERATED','AI_SYNTHETIC_PERSON','AI_SYNTHETIC_VOICE','AI_DEEPFAKE','UNKNOWN'] as const;
@@ -51,12 +55,12 @@ function auth(req: { mediaAuth: ApiIdentity | null }): ApiIdentity { if (!req.me
 function requireRole(req: { mediaAuth: ApiIdentity | null }, reply: any, allowed: ApiRole[]): boolean { const identity = auth(req); if (!allowed.includes(identity.role)) { void reply.code(403).send({ error: 'FORBIDDEN' }); return false; } return true; }
 app.get('/health', async () => ({ status: 'ok', service: 'media-passport', version: '1.0.0' }));
 app.get('/ready', async (_req, reply) => {
-  const databaseOk = await store.ready(); let scannerOk = false;
+  const databaseOk = await store.ready(); const evidenceOk=await kernelStore.ready(); const inventoryOk=await inventoryStore.ready(); const governanceOk=await governanceStore.ready(); let scannerOk = false;
   if (config.MALWARE_SCAN_URL) {
     try { const endpoint = new URL('/ready', config.MALWARE_SCAN_URL); const response = await fetch(endpoint, { signal: AbortSignal.timeout(Math.min(config.MALWARE_SCAN_TIMEOUT_MS, 3000)) }); scannerOk = response.ok; } catch { scannerOk = false; }
   }
-  if (!databaseOk || (config.NODE_ENV === 'production' && !scannerOk)) return reply.code(503).send({ status: 'not_ready', database: { ok: databaseOk }, scanner: { ok: scannerOk } });
-  return { status: 'ready', database: { ok: true }, scanner: { ok: scannerOk }, trustEngine: { ok: true } };
+  if (!databaseOk || !evidenceOk || !inventoryOk || !governanceOk || (config.NODE_ENV === 'production' && !scannerOk)) return reply.code(503).send({ status: 'not_ready', database: { ok: databaseOk }, evidence:{ok:evidenceOk}, inventory:{ok:inventoryOk}, governance:{ok:governanceOk}, scanner: { ok: scannerOk } });
+  return { status: 'ready', database: { ok: true }, evidence:{ok:true}, inventory:{ok:true}, governance:{ok:true}, scanner: { ok: scannerOk }, trustEngine: { ok: true } };
 });
 app.get('/ready/ai', async (_req, reply) => {
  const databaseOk = await aiStore.ready();
@@ -76,11 +80,14 @@ app.post('/v1/evidence/claims',async(req,reply)=>{if(!requireRole(req,reply,aiWr
 app.get('/v1/evidence/claims/:id/lineage',async(req,reply)=>{const org=tenant(req,reply);if(!org)return;const id=z.uuid().parse((req.params as{id:string}).id);const v=await kernelStore.lineage(org,id);return v??reply.code(404).send({error:'NOT_FOUND'})});
 app.post('/v1/ai/:id/accountability',async(req,reply)=>{if(!requireRole(req,reply,aiWriterRoles))return;const org=tenant(req,reply);if(!org)return;const b=z.object({eventId:z.uuid().nullable().default(null),metricType:z.enum(['AI_EXECUTION_TIME','MODEL_COST','TOKEN_COST','TOOL_COST','API_COST','INFRASTRUCTURE_COST','RETRY','FAILED_ACTION','REPEATED_INSTRUCTION','CORRECTION','BACKTRACK','UNDO','REWORK','HUMAN_INTERVENTION','HUMAN_WAIT_TIME','HUMAN_CORRECTION_TIME','RECOVERY_DURATION','TIME_SAVED','COST_AVOIDED','SUCCESSFUL_ACTION','FIRST_ATTEMPT_COMPLETION','AUTONOMOUS_COMPLETION']),value:z.number().nonnegative(),unit:z.enum(['MILLISECONDS','COUNT','TOKENS','USD','CAD','SECONDS','MINUTES']),valueState:z.enum(['OBSERVED','CALCULATED','CONFIGURED','ESTIMATED','UNKNOWN']),attribution:z.enum(['AI','HUMAN','TOOL','INTEGRATION','EXTERNAL','MIXED','UNKNOWN']),evidenceHash:hash,source:z.string().min(1).max(200),occurredAt:z.iso.datetime({offset:true}),calculation:z.record(z.string(),z.unknown()).default({})}).parse(req.body);const e=await accountabilityStore.append(org,{aiId:(req.params as{id:string}).id,...b});return e?reply.code(201).send(e):reply.code(404).send({error:'AI_NOT_FOUND'})});
 app.get('/v1/ai/:id/accountability',async(req,reply)=>{const org=tenant(req,reply);if(!org)return;if(!await aiStore.get(org,(req.params as{id:string}).id))return reply.code(404).send({error:'NOT_FOUND'});return accountabilityStore.statement(org,(req.params as{id:string}).id)});
+app.get('/v1/ai-inventory',async(req,reply)=>{const org=tenant(req,reply);if(!org)return;return inventoryStore.inventory(org)});
+app.post('/v1/governance/policies',async(req,reply)=>{if(!requireRole(req,reply,aiWriterRoles))return;const org=tenant(req,reply);if(!org)return;const b=z.object({version:z.number().int().positive().default(1),name:z.string().min(1).max(160),kind:z.enum(['BOUNDARY','POLICY']),status:z.enum(['DRAFT','ACTIVE','RETIRED']),conditions:z.array(z.object({field:z.string().min(1).max(100),op:z.enum(['EQ','NEQ','IN','GT','GTE','LT','LTE']),value:z.unknown()})).max(100)}).parse(req.body);return reply.code(201).send(await governanceStore.addPolicy(org,b))});
+app.post('/v1/governance/policies/:id/evaluate',async(req,reply)=>{if(!requireRole(req,reply,aiWriterRoles))return;const org=tenant(req,reply);if(!org)return;const q=z.object({version:z.coerce.number().int().positive()}).parse(req.query);const b=z.object({subjectType:z.string().min(1).max(80),subjectId:z.string().min(1).max(160),inputs:z.record(z.string(),z.unknown()),evidenceHashes:z.array(hash).max(100),evidenceState:z.enum(['SUPPORTED','PARTIAL','UNKNOWN','CONFLICTING','UNSUPPORTED']),enforcementMode:z.enum(['OBSERVE','ENFORCE']).default('OBSERVE')}).parse(req.body);const v=await governanceStore.evaluate(org,(req.params as{id:string}).id,q.version,b.subjectType,b.subjectId,b.inputs,b.evidenceHashes,b.evidenceState,b.enforcementMode);return v?reply.code(201).send(v):reply.code(404).send({error:'POLICY_NOT_FOUND'})});
 app.post('/v1/ai', async (req, reply) => {
  if (!requireRole(req, reply, aiWriterRoles)) return;
  const organizationId = tenant(req, reply); if (!organizationId) return;
  const body = z.object({ name: z.string().trim().min(1).max(120), purpose: z.string().trim().min(1).max(500), owner: z.string().max(120).nullable().default(null), provider: z.string().max(120).nullable().default(null), model: z.string().max(120).nullable().default(null) }).parse(req.body);
- return reply.code(201).send(await aiStore.register(organizationId, body));
+ const created=await aiStore.register(organizationId, body); await inventoryStore.register(organizationId,created.id); return reply.code(201).send(created);
 });
 app.get('/v1/ai/:id', async (req, reply) => {
  const organizationId = tenant(req, reply); if (!organizationId) return;
