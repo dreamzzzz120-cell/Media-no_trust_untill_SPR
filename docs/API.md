@@ -26,9 +26,9 @@ Roles: `viewer`, `creator`, `reviewer`, `moderator`, `analyst`, `organization_ad
 
 ## Cases
 
-`POST /v1/media/:id/appeal` — submit an appeal for human review.
+`POST /v1/media/:id/appeal` — returns `503 CASE_WORKFLOW_UNAVAILABLE` until durable case intake exists.
 
-`POST /v1/media/:id/report` — report impersonation, copyright, privacy, deception, spam or other concerns.
+`POST /v1/media/:id/report` — returns `503 CASE_WORKFLOW_UNAVAILABLE` until durable case intake exists.
 
 ## Platform recommendation
 
@@ -36,9 +36,9 @@ Roles: `viewer`, `creator`, `reviewer`, `moderator`, `analyst`, `organization_ad
 
 ## Public verification
 
-`GET /public/:id` returns a privacy-minimized Passport representation. It never serves original media bytes.
+`GET /public/:id` is closed (`404`) pending a persisted, authorized publication decision. It never serves original media bytes.
 
-`GET /passport/:id` renders a human-readable Passport page with trust vector, evidence and limitations.
+`GET /passport/:id` is closed (`404`) pending a persisted, authorized publication decision.
 
 ## Health
 
@@ -61,4 +61,4 @@ curl --fail-with-body -X POST "$MEDIA_PASSPORT_URL/v1/publisher/verify" \
   -F 'file=@./upload.mp4;type=video/mp4'
 ```
 
-The publisher may retrieve its private result with `GET /v1/media/:id` using the same tenant key and display `verificationUrl` to an operator. Private result endpoints return `404` for records belonging to another organization. Public passport URLs are intentionally accessible to anyone with the URL and must be evaluated for the publisher's privacy requirements before sharing. A malware or validation failure does not create a passport; handle `422`, `413`, `415`, and `503` as failed intake or retry as appropriate. Production requires PostgreSQL, the scanner, and configured storage controls before this flow can operate.
+The publisher may retrieve its private result with `GET /v1/media/:id` using the same tenant key. Private result endpoints return `404` for records belonging to another organization. Public passport URLs are disabled until publication authorization and durable sharing state exist. A malware or validation failure does not create a passport; handle `422`, `413`, `415`, and `503` as failed intake or retry as appropriate. Production requires PostgreSQL, the scanner, and configured storage controls before this flow can operate.
