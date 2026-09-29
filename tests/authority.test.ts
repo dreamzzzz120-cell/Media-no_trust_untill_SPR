@@ -1,4 +1,4 @@
-import { test, expect } from 'vitest';import{evaluateAuthority}from'../src/authority.js';
+import { test, expect } from 'vitest';import{evaluateAuthority,executionGate}from'../src/authority.js';
 const h='a'.repeat(64), now='2026-09-29T10:00:00.000Z';
 const base={actorEntityId:'actor',actionType:'SEND',license:{id:'l',licenseClass:2,validFrom:'2026-09-01T00:00:00.000Z',validUntil:'2026-10-01T00:00:00.000Z',evidenceHash:h},mission:{id:'m',maxLicenseClass:2,startsAt:'2026-09-01T00:00:00.000Z',expiresAt:'2026-10-01T00:00:00.000Z',evidenceHash:h},authorityStatus:'ACTIVE' as const,freshness:'CURRENT' as const,budget:'WITHIN_BUDGET' as const,law:'SUPPORTED' as const,now};
 test('authorizes only fully established active authority',()=>expect(evaluateAuthority(base).decision).toBe('AUTHORIZED'));
@@ -9,3 +9,5 @@ test('required approval without evidence is UNKNOWN',()=>expect(evaluateAuthorit
 test('over budget is not authorized',()=>expect(evaluateAuthority({...base,budget:'OVER_BUDGET'}).decision).toBe('NOT_AUTHORIZED'));
 test('unknown law evidence fails closed',()=>expect(evaluateAuthority({...base,law:'UNKNOWN'}).decision).toBe('UNKNOWN'));
 test('expired mission is not authorized',()=>expect(evaluateAuthority({...base,now:'2026-10-02T00:00:00.000Z'}).decision).toBe('NOT_AUTHORIZED'));
+
+test('execution gate allows only established authorization',()=>{expect(executionGate(evaluateAuthority(base))).toBe('ALLOW_EXECUTION');expect(executionGate(evaluateAuthority({...base,authorityStatus:'REVOKED'}))).toBe('DENY_EXECUTION');expect(executionGate(evaluateAuthority({...base,freshness:'UNKNOWN'}))).toBe('HOLD_UNKNOWN')});
