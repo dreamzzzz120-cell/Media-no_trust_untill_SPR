@@ -1,0 +1,2 @@
+import{describe,it,expect}from'vitest';import{createAuthorityStore}from'../src/authority-store.js';
+describe('authority store fail closed',()=>{it('does not establish authority without persisted storage',async()=>{const s=createAuthorityStore();expect(await s.ready()).toBe(false);const r=await s.check('org',{actorEntityId:'actor',actionType:'SEND',missionId:'mission'});expect(r.decision).toBe('UNKNOWN')})});
