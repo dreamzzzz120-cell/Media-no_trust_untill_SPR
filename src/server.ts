@@ -6,12 +6,12 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import fastifyStatic from '@fastify/static';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 import { z } from 'zod';
 import { loadConfig } from './config.js';
 import { createStore, type ApiIdentity, type ApiRole } from './db.js';
 import { verifyMedia } from './verification/engine.js';
-import { deleteStoredMedia, storeUpload } from './storage.js';
+import { deleteStoredMedia, promoteStoredMedia, storeUpload } from './storage.js';
 import { scanForMalware } from './security/malware.js';
 import { canReadTenantRecord } from './tenant.js';
 import { createAiStore } from './ai.js';
@@ -172,11 +172,12 @@ const verifyUpload = async (req: FastifyRequest, reply: FastifyReply) => {
   try {
     if (!config.MALWARE_SCAN_URL || !config.MALWARE_SCAN_TOKEN) throw new Error('MALWARE_SCANNER_NOT_CONFIGURED');
     await scanForMalware(upload.path, upload.sizeBytes, upload.mime, config.MALWARE_SCAN_URL, config.MALWARE_SCAN_TOKEN, config.MALWARE_SCAN_TIMEOUT_MS);
+    const cleanUpload=await promoteStoredMedia(upload,config.UPLOAD_DIR);
     const asset = { id: upload.id, sha256: upload.sha256, mime: upload.mime, kind: upload.kind, sizeBytes: upload.sizeBytes, originalFilename: upload.originalFilename, createdAt: new Date().toISOString(), ...(identity.organizationId ? { organizationId: identity.organizationId } : {}), ...(creatorId ? { creatorId } : {}), declaredAiUse };
-    const record = await verifyMedia(asset, upload.path, { verifyTrust: config.C2PA_VERIFY_TRUST, requireVerification: true }); await store.save(record); if (config.DELETE_SOURCE_AFTER_VERIFICATION) await deleteStoredMedia(upload.path, config.UPLOAD_DIR);
+    const record = await verifyMedia(asset, cleanUpload.path, { verifyTrust: config.C2PA_VERIFY_TRUST, requireVerification: true }); await store.save(record); if (config.DELETE_SOURCE_AFTER_VERIFICATION) await deleteStoredMedia(cleanUpload.path, config.UPLOAD_DIR);
     return reply.code(201).send(req.url === '/v1/publisher/verify' ? { passportId: asset.id, assetSha256: asset.sha256, decision: record.decision, confidence: record.confidence, aiStatus: record.aiStatus, provenance: record.provenance, evidence: record.observations, limitations: record.limitations, resultUrl: `/v1/media/${asset.id}`, verificationUrl: `/passport/${asset.id}` } : { passportId: asset.id, ...record, publicUrl: `/public/${asset.id}`, verificationUrl: `/passport/${asset.id}` });
   } catch (error) {
-    await deleteStoredMedia(upload.path, config.UPLOAD_DIR).catch((cleanupError) => req.log.error({ err: cleanupError, assetId: upload.id }, 'failed to remove quarantined media'));
+    await deleteStoredMedia(upload.path, config.UPLOAD_DIR).catch(()=>undefined); const cleanPath=resolve(config.UPLOAD_DIR,'clean',basename(upload.path)); await deleteStoredMedia(cleanPath, config.UPLOAD_DIR).catch((cleanupError) => req.log.error({ err: cleanupError, assetId: upload.id }, 'failed to remove media after verification failure'));
     const message = error instanceof Error ? error.message : String(error); req.log.error({ err: error, assetId: upload.id }, 'verification failed'); const malware = message === 'MALWARE_DETECTED';
     return reply.code(malware ? 422 : 503).send({ error: malware ? 'MALWARE_DETECTED' : 'VERIFICATION_UNAVAILABLE' });
   }
