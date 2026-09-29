@@ -164,7 +164,7 @@ const verifyUpload = async (req: FastifyRequest, reply: FastifyReply) => {
 };
 app.post('/v1/media/verify', verifyUpload);
 app.post('/v1/publisher/verify', verifyUpload);
-async function getRecord(id: string, reply: any, identity?: ApiIdentity | null) { if (!idPattern.test(id)) { void reply.code(400).send({ error: 'INVALID_ID' }); return null; } const record = await store.get(id); if (!record || (identity && !canReadTenantRecord(identity, record))) { void reply.code(404).send({ error: 'NOT_FOUND' }); return null; } return record; }
+async function getRecord(id: string, reply: any, identity?: ApiIdentity | null) { if (!idPattern.test(id)) { void reply.code(400).send({ error: 'INVALID_ID' }); return null; } const record = await store.get(id, identity?.organizationId ?? undefined); if (!record || (identity && !canReadTenantRecord(identity, record))) { void reply.code(404).send({ error: 'NOT_FOUND' }); return null; } return record; }
 app.get('/v1/media/:id', async (req, reply) => { const record = await getRecord((req.params as { id: string }).id, reply, req.mediaAuth); if (!record) return; return record; });
 app.get('/v1/media/:id/evidence', async (req, reply) => { const record = await getRecord((req.params as { id: string }).id, reply, req.mediaAuth); if (!record) return; return { passportId: record.asset.id, evidence: record.observations, evidenceQuality: record.trustVector.evidenceQuality }; });
 app.get('/v1/media/:id/provenance', async (req, reply) => { const record = await getRecord((req.params as { id: string }).id, reply, req.mediaAuth); if (!record) return; return { passportId: record.asset.id, provenance: record.provenance }; });
