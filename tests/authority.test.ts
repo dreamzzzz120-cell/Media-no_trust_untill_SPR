@@ -11,3 +11,5 @@ test('unknown law evidence fails closed',()=>expect(evaluateAuthority({...base,l
 test('expired mission is not authorized',()=>expect(evaluateAuthority({...base,now:'2026-10-02T00:00:00.000Z'}).decision).toBe('NOT_AUTHORIZED'));
 
 test('execution gate allows only established authorization',()=>{expect(executionGate(evaluateAuthority(base))).toBe('ALLOW_EXECUTION');expect(executionGate(evaluateAuthority({...base,authorityStatus:'REVOKED'}))).toBe('DENY_EXECUTION');expect(executionGate(evaluateAuthority({...base,freshness:'UNKNOWN'}))).toBe('HOLD_UNKNOWN')});
+
+test('explicit denial dominates simultaneous unknown evidence',()=>{const r=evaluateAuthority({...base,authorityStatus:'REVOKED',freshness:'UNKNOWN',budget:'UNKNOWN',law:'UNKNOWN'});expect(r.decision).toBe('NOT_AUTHORIZED');expect(r.reasons).toContain('AUTHORITY_INACTIVE');expect(r.reasons).toContain('AUTHORITY_FRESHNESS_NOT_ESTABLISHED');expect(executionGate(r)).toBe('DENY_EXECUTION')});
