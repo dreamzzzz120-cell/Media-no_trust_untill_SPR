@@ -5,7 +5,8 @@ export type AuthorityDecision='AUTHORIZED'|'NOT_AUTHORIZED'|'UNKNOWN';
 export interface AuthorityInput {
  actorEntityId:string; actionType:string; targetResourceId?:string|null;
  license?:{id:string;licenseClass:number;endorsements?:string[];scope?:{actionTypes?:string[];resourceIds?:string[]}|null;validFrom:string;validUntil?:string|null;evidenceHash:string}|null;
- mission?:{id:string;maxLicenseClass:number;startsAt:string;expiresAt:string;endedAt?:string|null;evidenceHash:string}|null;
+ mission?:{id:string;maxLicenseClass:number;scope?:{actionTypes?:string[];resourceIds?:string[]}|null;startsAt:string;expiresAt:string;endedAt?:string|null;evidenceHash:string}|null;
+ delegation?:{delegatedClass:number;endorsements?:string[];scope?:{actionTypes?:string[];resourceIds?:string[]}|null;expiresAt:string;evidenceHash:string}|null;
  approval?:{required:boolean;decision?:'APPROVED'|'DENIED'|'UNKNOWN';validUntil?:string|null;evidenceHash?:string|null}|null;
  authorityStatus?:'ACTIVE'|'EXPIRED'|'REVOKED'|'SUSPENDED'|'UNKNOWN';
  freshness?:'CURRENT'|'STALE'|'UNKNOWN';
@@ -33,6 +34,9 @@ export function evaluateAuthority(i:AuthorityInput):AuthorityResult {
  else {if(i.license.licenseClass<policy.minimumClass) reasons.push('LICENCE_CLASS_INSUFFICIENT');const e=i.license.endorsements??[];if(policy.requiredEndorsements.some(x=>!e.includes(x)))reasons.push('REQUIRED_ENDORSEMENT_MISSING')}
  if(i.license.scope?.actionTypes&&!i.license.scope.actionTypes.includes(i.actionType))reasons.push('ACTION_OUTSIDE_LICENCE_SCOPE');
  if(i.targetResourceId&&i.license.scope?.resourceIds&&!i.license.scope.resourceIds.includes(i.targetResourceId))reasons.push('RESOURCE_OUTSIDE_LICENCE_SCOPE');
+ if(i.mission.scope?.actionTypes&&!i.mission.scope.actionTypes.includes(i.actionType))reasons.push('ACTION_OUTSIDE_MISSION_SCOPE');
+ if(i.targetResourceId&&i.mission.scope?.resourceIds&&!i.mission.scope.resourceIds.includes(i.targetResourceId))reasons.push('RESOURCE_OUTSIDE_MISSION_SCOPE');
+ if(i.delegation){const de=Date.parse(i.delegation.expiresAt);if(!validHash(i.delegation.evidenceHash)||!Number.isFinite(de))unknowns.push('DELEGATION_EVIDENCE_NOT_ESTABLISHED');else if(Number.isFinite(t)&&t>=de)reasons.push('DELEGATION_EXPIRED');if(i.license.licenseClass>i.delegation.delegatedClass)reasons.push('LICENCE_EXCEEDS_DELEGATION');if(i.delegation.scope?.actionTypes&&!i.delegation.scope.actionTypes.includes(i.actionType))reasons.push('ACTION_OUTSIDE_DELEGATION_SCOPE');if(i.targetResourceId&&i.delegation.scope?.resourceIds&&!i.delegation.scope.resourceIds.includes(i.targetResourceId))reasons.push('RESOURCE_OUTSIDE_DELEGATION_SCOPE');if(policy&&policy.requiredEndorsements.some(x=>!(i.delegation?.endorsements??[]).includes(x)))reasons.push('DELEGATED_ENDORSEMENT_MISSING')}
  if(i.approval?.required){
    if(i.approval.decision==='DENIED') reasons.push('APPROVAL_DENIED');
    else if(i.approval.decision!=='APPROVED'||!validHash(i.approval.evidenceHash)||(i.approval.validUntil&&t>=Date.parse(i.approval.validUntil)))
