@@ -2,7 +2,7 @@ import{describe,it,expect,vi}from'vitest';import{executeGoverned}from'../src/exe
 const auth=(decision:'AUTHORIZED'|'NOT_AUTHORIZED'|'UNKNOWN')=>({id:'eval-1',decision,reasons:[],evaluatedAt:'2026-09-29T10:00:00.000Z'});
 const req=(decision:'AUTHORIZED'|'NOT_AUTHORIZED'|'UNKNOWN')=>({organizationId:'org',actorEntityId:'actor',actionType:'SEND',payload:{x:1},authority:auth(decision)});
 describe('governed execution',()=>{
- it('never invokes executor when denied',async()=>{const x=vi.fn(async()=>{});const r=await executeGoverned(req('NOT_AUTHORIZED'),x);expect(x).not.toHaveBeenCalled();expect(r.outcome).toBe('BLOCKED')});
+ it('never invokes executor when denied',async()=>{const x=vi.fn(async()=>{});const r=await executeGoverned(req('NOT_AUTHORIZED'),x);expect(x).not.toHaveBeenCalled();expect(r.outcome).toBe('DENIED_NOT_EXECUTED')});
  it('never invokes executor when authority is unknown',async()=>{const x=vi.fn(async()=>{});const r=await executeGoverned(req('UNKNOWN'),x);expect(x).not.toHaveBeenCalled();expect(r.outcome).toBe('UNKNOWN')});
  it('records observed success only after executor returns',async()=>{const x=vi.fn(async()=>{});const r=await executeGoverned(req('AUTHORIZED'),x);expect(x).toHaveBeenCalledOnce();expect(r.outcome).toBe('OBSERVED_SUCCEEDED')});
  it('records observed failure when authorized executor throws',async()=>{const x=vi.fn(async()=>{throw Error('provider failed')});const r=await executeGoverned(req('AUTHORIZED'),x);expect(r.outcome).toBe('OBSERVED_FAILED')});
