@@ -1,1 +1,51 @@
-const $=id=>document.getElementById(id);const form=$('form'),status=$('status'),passport=$('passport');$('file').addEventListener('change',e=>{$('filename').textContent=e.target.files?.[0]?.name||'Select a media file to verify'});form.addEventListener('submit',async event=>{event.preventDefault();const file=$('file').files[0],key=$('key').value,ai=$('ai').value;if(!file||!key)return;status.textContent='Quarantining, scanning and building evidence…';passport.classList.add('hidden');const body=new FormData();body.append('file',file);try{const response=await fetch('/v1/media/verify',{method:'POST',headers:{'x-api-key':key,'x-declared-ai-use':ai},body});const data=await response.json();if(!response.ok)throw new Error(data.error||'Verification failed');$('decision').textContent=data.decision||'UNKNOWN';$('confidence').textContent=Math.round((data.confidence??0)*100)+'% confidence';$('summary').textContent=data.decision==='UNKNOWN'?'The available evidence does not support a stronger conclusion. Unknown remains unknown.':'This assessment reflects the evidence available at verification time.';$('aiStatus').textContent=data.aiStatus||'UNKNOWN';$('trustScore').textContent=data.trustScore??'N/A';$('passportId').textContent=data.passportId||'—';$('provenance').textContent=JSON.stringify(data.provenance??{},null,2);$('evidence').textContent=JSON.stringify(data.observations??[],null,2);$('limitations').textContent=JSON.stringify(data.limitations??[],null,2);status.textContent='Verification complete';passport.classList.remove('hidden')}catch(error){status.textContent='Verification unavailable — no Passport was fabricated.';$('decision').textContent='UNAVAILABLE';$('summary').textContent=error instanceof Error?error.message:String(error);passport.classList.remove('hidden')}});
+const $ = id => document.getElementById(id);
+const form = $('form'), status = $('status'), passport = $('passport');
+const health = $('health'), verifyButton = $('verifyButton');
+async function checkHealth() {
+  try {
+    const response = await fetch('/ready', { cache: 'no-store' });
+    if (!response.ok) throw new Error('Scanner unavailable');
+    health.textContent = 'Media verification available';
+    verifyButton.disabled = false;
+  } catch {
+    health.textContent = 'Media verification unavailable — scanner readiness could not be confirmed.';
+    verifyButton.disabled = true;
+  }
+}
+void checkHealth();
+setInterval(checkHealth, 30000);
+$('file').addEventListener('change', event => {
+  $('filename').textContent = event.target.files?.[0]?.name || 'Select a media file to verify';
+});
+form.addEventListener('submit', async event => {
+  event.preventDefault();
+  if (verifyButton.disabled) return;
+  const file = $('file').files[0], key = $('key').value, ai = $('ai').value;
+  if (!file || !key) return;
+  status.textContent = 'Quarantining, scanning and building evidence…';
+  passport.classList.add('hidden');
+  const body = new FormData();
+  body.append('file', file);
+  try {
+    const response = await fetch('/v1/media/verify', { method: 'POST', headers: { 'x-api-key': key, 'x-declared-ai-use': ai }, body });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Verification failed');
+    $('decision').textContent = data.decision || 'UNKNOWN';
+    $('confidence').textContent = Math.round((data.confidence ?? 0) * 100) + '% confidence';
+    $('summary').textContent = data.decision === 'UNKNOWN' ? 'The available evidence does not support a stronger conclusion. Unknown remains unknown.' : 'This assessment reflects the evidence available at verification time.';
+    $('aiStatus').textContent = data.aiStatus || 'UNKNOWN';
+    $('trustScore').textContent = data.trustScore ?? 'N/A';
+    $('passportId').textContent = data.passportId || '—';
+    $('provenance').textContent = JSON.stringify(data.provenance ?? {}, null, 2);
+    $('evidence').textContent = JSON.stringify(data.observations ?? [], null, 2);
+    $('limitations').textContent = JSON.stringify(data.limitations ?? [], null, 2);
+    status.textContent = 'Verification complete';
+    passport.classList.remove('hidden');
+  } catch (error) {
+    status.textContent = 'Verification unavailable — no Passport was fabricated.';
+    $('decision').textContent = 'UNAVAILABLE';
+    $('summary').textContent = error instanceof Error ? error.message : String(error);
+    passport.classList.remove('hidden');
+    void checkHealth();
+  }
+});
