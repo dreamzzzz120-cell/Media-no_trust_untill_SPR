@@ -18,3 +18,7 @@ test('unknown action policy fails closed',()=>expect(evaluateAuthority({...base,
 test('insufficient licence class is denied',()=>expect(evaluateAuthority({...base,actionType:'TRANSACT',license:{...base.license,licenseClass:3,endorsements:['FIN']}}).decision).toBe('NOT_AUTHORIZED'));
 test('missing required endorsement is denied',()=>expect(evaluateAuthority({...base,actionType:'TRANSACT',license:{...base.license,licenseClass:4,endorsements:[]}}).decision).toBe('NOT_AUTHORIZED'));
 test('action outside explicit licence scope is denied',()=>expect(evaluateAuthority({...base,license:{...base.license,scope:{actionTypes:['OBSERVE']}}}).decision).toBe('NOT_AUTHORIZED'));
+
+test('malformed authority timestamps fail closed',()=>{const r=evaluateAuthority({...base,license:{...base.license,validFrom:'not-a-date'}});expect(r.decision).toBe('UNKNOWN');expect(r.reasons).toContain('AUTHORITY_TIME_EVIDENCE_INVALID')});
+test('revocation dominates missing mission',()=>{const r=evaluateAuthority({...base,mission:null,authorityStatus:'REVOKED'});expect(r.decision).toBe('NOT_AUTHORIZED');expect(r.reasons).toContain('AUTHORITY_INACTIVE');expect(r.reasons).toContain('LICENCE_OR_MISSION_NOT_ESTABLISHED')});
+test('revocation dominates invalid evidence hash',()=>{const r=evaluateAuthority({...base,authorityStatus:'REVOKED',license:{...base.license,evidenceHash:'bad'}});expect(r.decision).toBe('NOT_AUTHORIZED');expect(r.reasons).toContain('AUTHORITY_INACTIVE');expect(r.reasons).toContain('AUTHORITY_EVIDENCE_NOT_ESTABLISHED')});
