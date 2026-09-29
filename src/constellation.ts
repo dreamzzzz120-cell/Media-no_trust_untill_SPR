@@ -2,7 +2,7 @@ import postgres from 'postgres';
 import { randomUUID } from 'node:crypto';
 export type EntityType='AI_AGENT'|'MODEL'|'HUMAN'|'TOOL'|'API'|'DATABASE'|'OBSERVER'|'POLICY'|'SYSTEM'|'WORKLOAD'|'CREDENTIAL'|'ARTIFACT'|'UNKNOWN';
 export type EvidenceState='OBSERVED'|'VERIFIED'|'DECLARED'|'UNKNOWN'|'STALE'|'CONFLICTING'|'UNAVAILABLE';
-export type RelationshipType='ORBIT'|'CLUSTER'|'WORMHOLE'|'DEPENDENCY'|'INTERACTION'|'PROVENANCE'|'OBSERVATION'|'POLICY_APPLIES'|'TRANSIENT';
+export type RelationshipType='ORBIT'|'CLUSTER'|'WORMHOLE'|'DEPENDENCY'|'INTERACTION'|'PROVENANCE'|'OBSERVATION'|'POLICY_APPLIES'|'TRANSIENT'|'GRAVITY'|'OXYGEN';
 export type ConstellationEventType='SUPERNOVA'|'BLACK_HOLE'|'NEBULA'|'CHANGE'|'BOUNDARY'|'VISIBILITY_LOSS';
 export interface Entity{id:string;entityType:EntityType;name:string;evidenceState:EvidenceState;evidenceHash:string;source:string;firstObservedAt:string;lastObservedAt:string;metadata:Record<string,unknown>;knownAt?:string}
 export interface Relationship{id:string;fromEntityId:string;toEntityId:string;relationshipType:RelationshipType;evidenceState:EvidenceState;evidenceHash:string;source:string;observedAt:string;endedAt:string|null;metadata:Record<string,unknown>;knownAt?:string}
