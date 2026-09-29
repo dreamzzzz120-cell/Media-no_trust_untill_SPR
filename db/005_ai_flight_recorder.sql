@@ -22,6 +22,7 @@ CREATE TABLE flight_records (
 );
 CREATE UNIQUE INDEX flight_records_external_idx ON flight_records(organization_id, source, external_event_id) WHERE external_event_id IS NOT NULL;
 CREATE INDEX flight_records_timeline_idx ON flight_records(organization_id, ai_identity_id, occurred_at, id);
+CREATE INDEX flight_records_sequence_idx ON flight_records(organization_id, ai_identity_id, sequence);
 CREATE OR REPLACE FUNCTION reject_ai_event_mutation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'flight_records is append-only'; END $$;
 CREATE TRIGGER flight_records_immutable BEFORE UPDATE OR DELETE ON flight_records FOR EACH ROW EXECUTE FUNCTION reject_ai_event_mutation();
 
