@@ -1,0 +1,35 @@
+services:
+  clamav:
+    image: clamav/clamav:1.4
+    restart: unless-stopped
+    environment:
+      CLAMAV_NO_MILTERD: "true"
+      CLAMD_CONF_TCPSocket: "3310"
+      CLAMD_CONF_TCPAddr: "0.0.0.0"
+      CLAMD_CONF_StreamMaxLength: "550M"
+    volumes:
+      - clamav-signatures:/var/lib/clamav
+
+  adapter:
+    build:
+      context: .
+      dockerfile: Dockerfile.scanner-adapter
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      CLAMD_HOST: clamav
+      CLAMD_PORT: "3310"
+      MALWARE_SCAN_TOKEN: ${MALWARE_SCAN_TOKEN:?Set the existing Railway MALWARE_SCAN_TOKEN in .env.local-scanner}
+    depends_on:
+      - clamav
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://adapter:8080
+    depends_on:
+      - adapter
+
+volumes:
+  clamav-signatures:
