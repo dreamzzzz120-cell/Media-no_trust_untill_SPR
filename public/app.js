@@ -1,51 +1,24 @@
-const $ = id => document.getElementById(id);
-const form = $('form'), status = $('status'), passport = $('passport');
-const health = $('health'), verifyButton = $('verifyButton');
-async function checkHealth() {
-  try {
-    const response = await fetch('/ready', { cache: 'no-store' });
-    if (!response.ok) throw new Error('Scanner unavailable');
-    health.textContent = 'Media verification available';
-    verifyButton.disabled = false;
-  } catch {
-    health.textContent = 'Media verification unavailable — scanner readiness could not be confirmed.';
-    verifyButton.disabled = true;
-  }
+const $=id=>document.getElementById(id);
+const state={nodes:[],edges:[],events:[],selected:null};
+const safe=v=>v==null?'—':String(v);
+async function json(path){const r=await fetch(path,{cache:'no-store'});if(!r.ok)throw new Error(path+' '+r.status);return r.json()}
+async function health(){try{await json('/ready');$('health').textContent='● Evidence sources connected';$('health').style.color='#70d7b1'}catch{$('health').textContent='● Evidence sources unavailable';$('health').style.color='#c28b6b'}}
+function normalize(payloads){
+ const rows=[];
+ for(const p of payloads){if(!p)continue;const a=Array.isArray(p)?p:Array.isArray(p.items)?p.items:Array.isArray(p.observations)?p.observations:Array.isArray(p.events)?p.events:Array.isArray(p.passports)?p.passports:[];rows.push(...a)}
+ const seen=new Map(),events=[];
+ rows.forEach((r,i)=>{const id=safe(r.entityId||r.passportId||r.id||r.artifactId||r.subjectId||('observation-'+i));const name=safe(r.name||r.title||r.type||r.kind||r.decision||id);if(!seen.has(id))seen.set(id,{id,name,status:r.status||r.decision||'OBSERVED',records:0,first:r.createdAt||r.observedAt||r.timestamp,last:r.updatedAt||r.observedAt||r.createdAt,raw:r});const n=seen.get(id);n.records++;n.last=r.updatedAt||r.observedAt||r.createdAt||n.last;events.push({name,at:n.last,id})});
+ state.nodes=[...seen.values()].slice(0,18);state.events=events.filter(e=>e.at).sort((a,b)=>String(b.at).localeCompare(String(a.at))).slice(0,20);state.edges=[];
 }
-void checkHealth();
-setInterval(checkHealth, 30000);
-$('file').addEventListener('change', event => {
-  $('filename').textContent = event.target.files?.[0]?.name || 'Select a media file to verify';
-});
-form.addEventListener('submit', async event => {
-  event.preventDefault();
-  if (verifyButton.disabled) return;
-  const file = $('file').files[0], key = $('key').value, ai = $('ai').value;
-  if (!file || !key) return;
-  status.textContent = 'Quarantining, scanning and building evidence…';
-  passport.classList.add('hidden');
-  const body = new FormData();
-  body.append('file', file);
-  try {
-    const response = await fetch('/v1/media/verify', { method: 'POST', headers: { 'x-api-key': key, 'x-declared-ai-use': ai }, body });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Verification failed');
-    $('decision').textContent = data.decision || 'UNKNOWN';
-    $('confidence').textContent = Math.round((data.confidence ?? 0) * 100) + '% confidence';
-    $('summary').textContent = data.decision === 'UNKNOWN' ? 'The available evidence does not support a stronger conclusion. Unknown remains unknown.' : 'This assessment reflects the evidence available at verification time.';
-    $('aiStatus').textContent = data.aiStatus || 'UNKNOWN';
-    $('trustScore').textContent = data.trustScore ?? 'N/A';
-    $('passportId').textContent = data.passportId || '—';
-    $('provenance').textContent = JSON.stringify(data.provenance ?? {}, null, 2);
-    $('evidence').textContent = JSON.stringify(data.observations ?? [], null, 2);
-    $('limitations').textContent = JSON.stringify(data.limitations ?? [], null, 2);
-    status.textContent = 'Verification complete';
-    passport.classList.remove('hidden');
-  } catch (error) {
-    status.textContent = 'Verification unavailable — no Passport was fabricated.';
-    $('decision').textContent = 'UNAVAILABLE';
-    $('summary').textContent = error instanceof Error ? error.message : String(error);
-    passport.classList.remove('hidden');
-    void checkHealth();
-  }
-});
+function draw(){
+ $('entityCount').textContent=state.nodes.length;$('evidenceCount').textContent=state.nodes.reduce((n,x)=>n+x.records,0);$('reviewCount').textContent=state.nodes.filter(n=>/unknown|review|limited/i.test(n.status)).length;$('lastObserved').textContent=state.events[0]?.at?new Date(state.events[0].at).toLocaleDateString():'—';
+ const g=$('graph');g.innerHTML='';if(!state.nodes.length){g.innerHTML='<div class="empty">No observable entities returned by the connected evidence endpoints. Nothing is fabricated.</div>';return}
+ const cx=50,cy=50,R=36;state.nodes.forEach((n,i)=>{const a=(Math.PI*2*i/state.nodes.length)-Math.PI/2;n.x=cx+Math.cos(a)*R;n.y=cy+Math.sin(a)*R});
+ state.nodes.forEach((n,i)=>{if(i===0)return;const p=state.nodes[Math.floor((i-1)/2)];const dx=n.x-p.x,dy=n.y-p.y;const e=document.createElement('div');e.className='edge';e.style.left=p.x+'%';e.style.top=p.y+'%';e.style.width=Math.hypot(dx,dy)+'%';e.style.transform='rotate('+Math.atan2(dy,dx)+'rad)';g.appendChild(e)});
+ state.nodes.forEach(n=>{const b=document.createElement('button');b.className='node '+(/unknown|review|limited/i.test(n.status)?'unknown':'');b.style.left=n.x+'%';b.style.top=n.y+'%';b.textContent=n.name.slice(0,24);b.onclick=()=>select(n,b);g.appendChild(b)});
+ const ev=state.events.slice(0,8);$('timelineEvents').innerHTML=ev.length?ev.map(e=>'<span>'+escapeHtml(e.name)+' · '+new Date(e.at).toLocaleTimeString()+'</span>').join(''):'<span>No timestamped evidence returned.</span>';$('recorderEvents').innerHTML=ev.length?ev.map(e=>'<div class="event"><b>'+escapeHtml(e.name)+'</b><span>'+new Date(e.at).toLocaleString()+' · observed record</span></div>').join(''):'<div class="empty">No observed events loaded.</div>'
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function select(n,b){document.querySelectorAll('.node').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.selected=n;$('entityDetail').innerHTML='<span class="badge">'+escapeHtml(n.status)+'</span><h2 class="detail-title">'+escapeHtml(n.name)+'</h2><p class="detail-copy">This entity is shown because a connected Media endpoint returned an observable record. Fields not returned by the server are not inferred.</p><div class="facts"><div><small>EVIDENCE</small><strong>'+n.records+' record'+(n.records===1?'':'s')+'</strong></div><div><small>LAST OBSERVED</small><strong>'+escapeHtml(n.last?new Date(n.last).toLocaleString():'Unknown')+'</strong></div></div><small>OBSERVED PAYLOAD</small><pre>'+escapeHtml(JSON.stringify(n.raw,null,2))+'</pre>'}
+async function load(){await health();const endpoints=['/v1/passports','/v1/evidence','/v1/observations','/v1/ai/events'];const settled=await Promise.allSettled(endpoints.map(json));const good=settled.filter(x=>x.status==='fulfilled').map(x=>x.value);$('sourceCount').textContent=good.length+' evidence source'+(good.length===1?'':'s')+' responding';normalize(good);draw()}
+$('refresh').onclick=load;$('closeInspector').onclick=()=>{$('entityDetail').innerHTML='<div class="empty">Select an observed entity to inspect its evidence.</div>'};void load();setInterval(health,30000);
