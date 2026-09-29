@@ -8,7 +8,7 @@ export type SourceType = 'DECLARATION' | 'DIRECT_OBSERVATION' | 'AUTHORITATIVE_S
 export interface AiSystem { id: string; organizationId: string; name: string; purpose: string; owner: string | null; provider: string | null; model: string | null; createdAt: string }
 export interface AiEvent { id: string; aiId: string; eventType: AiEventType; sourceType: SourceType; source: string; summary: string; occurredAt: string; recordedAt: string; evidenceHash: string; previousHash: string | null; eventHash: string; state: EvidenceState; relatedEventId: string | null; sequence?: number }
 export interface AiAlert { id: string; aiId: string; claimEventId: string; resultEventId: string; severity: 'CRITICAL'; summary: string; createdAt: string }
-export interface AiIntegrity { state: 'VALID_INTERNAL_CHAIN' | 'BROKEN' | 'EMPTY'; checkedEvents: number; failures: string[]; externalAnchor: 'NOT_CONFIGURED' }
+export interface AiIntegrity { state: 'VALID_INTERNAL_CHAIN' | 'BROKEN' | 'EMPTY' | 'INCOMPLETE'; checkedEvents: number; failures: string[]; externalAnchor: 'NOT_CONFIGURED' }
 export type EventInput = Pick<AiEvent, 'eventType' | 'sourceType' | 'source' | 'summary' | 'occurredAt' | 'evidenceHash'>;
 export interface ConfirmationInput { claimEventId: string; outcome: ExternalOutcome; source: string; occurredAt: string; evidenceHash: string; externalEventId: string }
 export interface AiStore {
@@ -23,6 +23,7 @@ export interface AiStore {
  close(): Promise<void>;
 }
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 function makeEvent(aiId: string, input: EventInput, previousHash: string | null, state: EvidenceState = 'DECLARED', relatedEventId: string | null = null): AiEvent {
  const event = { id: randomUUID(), aiId, ...input, occurredAt: new Date(input.occurredAt).toISOString(), recordedAt: new Date().toISOString(), previousHash, state, relatedEventId };
  return { ...event, eventHash: digest(JSON.stringify(event)) };
@@ -75,8 +76,9 @@ class PgAiStore implements AiStore {
   const rows = await this.sql<SystemRow[]>`INSERT INTO ai_identities(id, organization_id, name, purpose, owner, provider, model) VALUES (${randomUUID()}, ${org}, ${input.name}, ${input.purpose}, ${input.owner}, ${input.provider}, ${input.model}) RETURNING *`;
   if (!rows[0]) throw new Error('AI_REGISTRATION_FAILED'); return systemFromRow(rows[0]);
  }
- async get(org: string, id: string) { const rows = await this.sql<SystemRow[]>`SELECT * FROM ai_identities WHERE organization_id=${org} AND id=${id}`; return rows[0] ? systemFromRow(rows[0]) : null; }
+ async get(org: string, id: string) { if (!isUuid(id)) return null; const rows = await this.sql<SystemRow[]>`SELECT * FROM ai_identities WHERE organization_id=${org} AND id=${id}`; return rows[0] ? systemFromRow(rows[0]) : null; }
  async append(org: string, aiId: string, input: EventInput) {
+  if (!isUuid(aiId)) return null;
   return this.sql.begin(async tx => {
    const systems = await tx`SELECT id FROM ai_identities WHERE organization_id=${org} AND id=${aiId} FOR UPDATE`; if (!systems.length) return null;
    const prior = await tx<{ event_hash: string }[]>`SELECT event_hash FROM flight_records WHERE organization_id=${org} AND ai_identity_id=${aiId} ORDER BY sequence DESC LIMIT 1`;
@@ -99,8 +101,10 @@ class PgAiStore implements AiStore {
  async timeline(org: string, aiId: string, afterSequence = 0, limit = 1000) { const rows = await this.sql<EventRow[]>`SELECT * FROM flight_records WHERE organization_id=${org} AND ai_identity_id=${aiId} AND sequence > ${afterSequence} ORDER BY sequence ASC LIMIT ${limit}`; return rows.map(eventFromRow); }
  async alerts(org: string, aiId: string) { const rows = await this.sql<AlertRow[]>`SELECT * FROM ai_alerts WHERE organization_id=${org} AND ai_identity_id=${aiId} ORDER BY created_at DESC LIMIT 100`; return rows.map(alertFromRow); }
  async integrity(org: string, aiId: string) {
-  const rows = await this.sql<(EventRow & { ledger_hash: string | null })[]>`SELECT f.*, l.cryptographic_hash AS ledger_hash FROM flight_records f LEFT JOIN evidence_ledger l ON l.flight_record_id=f.id AND l.organization_id=f.organization_id WHERE f.organization_id=${org} AND f.ai_identity_id=${aiId} ORDER BY f.sequence ASC`;
-  return checkChain(rows.map(eventFromRow), new Map(rows.map(r => [r.id, r.ledger_hash ?? 'MISSING'])));
+  const rows = await this.sql<(EventRow & { ledger_hash: string | null })[]>`SELECT f.*, l.cryptographic_hash AS ledger_hash FROM flight_records f LEFT JOIN evidence_ledger l ON l.flight_record_id=f.id AND l.organization_id=f.organization_id WHERE f.organization_id=${org} AND f.ai_identity_id=${aiId} ORDER BY f.sequence ASC LIMIT 10001`;
+  const incomplete = rows.length > 10000; const checked = rows.slice(0, 10000);
+  const result = checkChain(checked.map(eventFromRow), new Map(checked.map(r => [r.id, r.ledger_hash ?? 'MISSING'])));
+  return incomplete && result.state === 'VALID_INTERNAL_CHAIN' ? { ...result, state:'INCOMPLETE' as const } : result;
  }
  async close() { await this.sql.end({ timeout: 5 }); }
 }
