@@ -1,0 +1,4 @@
+import{digest}from'./observation.js';
+export type ReportCoverage='SUPPORTED'|'PARTIAL'|'UNKNOWN'|'UNAVAILABLE';
+export interface ReportSection{name:string;coverage:ReportCoverage;facts:unknown[]}
+export function buildCustomerReport(org:string,type:string,asOf:string,sections:ReportSection[]){let coverage:ReportCoverage='SUPPORTED';if(!sections.length)coverage='UNKNOWN';else if(sections.some(s=>s.coverage!=='SUPPORTED'))coverage='PARTIAL';const content={organizationId:org,reportType:type,asOf,coverage,sections,limitations:coverage==='SUPPORTED'?[]:['Some sections lack supported observation coverage. Missing evidence is not treated as a positive result.']};return{content,contentHash:digest(content)}}
