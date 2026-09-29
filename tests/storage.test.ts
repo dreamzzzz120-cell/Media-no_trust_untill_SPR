@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Readable } from 'node:stream';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { storeUpload } from '../src/storage.js';
+import { promoteStoredMedia, storeUpload } from '../src/storage.js';
 
 describe('storage boundary', () => {
   it('rejects empty uploads', async () => {
@@ -17,3 +17,5 @@ describe('storage boundary', () => {
     await rm(dir, { recursive: true, force: true });
   });
 });
+
+  it('quarantines bytes until explicitly promoted and rejects arbitrary promotion paths', async () => { const dir=await mkdtemp(join(tmpdir(),'spr-media-')); const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2ioAAAAASUVORK5CYII=','base64'); const stored=await storeUpload(Readable.from([png]),'sample.png','image/png',dir,1024*1024); expect(stored.path).toContain(join(dir,'quarantine')); await expect(access(stored.path)).resolves.toBeUndefined(); const clean=await promoteStoredMedia(stored,dir); expect(clean.path).toContain(join(dir,'clean')); await expect(access(clean.path)).resolves.toBeUndefined(); await expect(access(stored.path)).rejects.toThrow(); await expect(promoteStoredMedia({...clean,path:clean.path},dir)).rejects.toThrow('MEDIA_NOT_QUARANTINED'); await rm(dir,{recursive:true,force:true}); });
