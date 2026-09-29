@@ -1,0 +1,6 @@
+import{createHash}from'node:crypto';import{expect,it}from'vitest';import{buildExport,money,onboardingStatus}from'../src/platform.js';const h=(s:string)=>createHash('sha256').update(s).digest('hex');
+it('keeps unknown money unknown instead of inventing zero',()=>expect(money('UNKNOWN',null,null,'provider did not expose cost',[]).amountMinor).toBeNull());
+it('rejects unknown money with a fabricated amount',()=>expect(()=>money('UNKNOWN',0,'USD','guess',[])).toThrow('UNKNOWN_CANNOT_HAVE_AMOUNT'));
+it('requires evidence identity for observed money',()=>expect(()=>money('OBSERVED',100,'USD','invoice',['fake'])).toThrow('INVALID_EVIDENCE_HASH'));
+it('builds deterministic export manifests with completeness limitation',()=>{const x={organizationId:'o',asOf:'2026-09-29T01:00:00Z',records:[{type:'e',id:'1',hash:h('1'),data:{x:1}}]};expect(buildExport(x).manifestHash).toBe(buildExport(x).manifestHash);expect(buildExport(x).manifest.limitations[0]).toMatch(/does not prove completeness/)});
+it('does not mark onboarding ready with missing required steps',()=>expect(onboardingStatus({apiKey:true},['apiKey','collector']).status).toBe('BLOCKED'));
