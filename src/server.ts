@@ -63,7 +63,7 @@ app.addHook('onRequest', async (req, reply) => {
   const supplied = req.headers['x-api-key'];
   if (typeof supplied !== 'string') return reply.code(401).send({ error: 'UNAUTHORIZED' });
   const expected = config.API_KEY;
-  if (expected) { const suppliedBuffer = Buffer.from(supplied); const expectedBuffer = Buffer.from(expected); if (suppliedBuffer.length === expectedBuffer.length && timingSafeEqual(suppliedBuffer, expectedBuffer)) { req.mediaAuth = { keyId: 'bootstrap', organizationId: null, role: 'super_admin' }; return; } }
+  if (expected) { const suppliedBuffer = Buffer.from(supplied); const expectedBuffer = Buffer.from(expected); if (suppliedBuffer.length === expectedBuffer.length && timingSafeEqual(suppliedBuffer, expectedBuffer)) { req.mediaAuth = { keyId: 'bootstrap', organizationId: null, role: config.BOOTSTRAP_API_ROLE }; return; } }
   const identity = await store.authenticateApiKey(supplied);
   if (!identity) { req.log.warn({ ip:req.ip, route:req.routeOptions?.url ?? new URL(req.url,'http://localhost').pathname }, 'authentication rejected'); return reply.code(401).send({ error: 'UNAUTHORIZED' }); }
   req.mediaAuth = identity;
