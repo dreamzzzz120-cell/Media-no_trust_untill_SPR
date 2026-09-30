@@ -56,6 +56,14 @@ const send = (res, status, body) => {
   res.end(JSON.stringify(body));
 };
 http.createServer(async (req, res) => {
+  if (req.method === 'GET' && req.url === '/health') {
+    try {
+      const pong = await clamd('zPING\0');
+      return send(res, pong === 'PONG' ? 200 : 503, { ready: pong === 'PONG' });
+    } catch {
+      return send(res, 503, { ready: false });
+    }
+  }
   if (req.method === 'GET' && req.url === '/ready') {
     if (!equal(req.headers.authorization, 'Bearer ' + token)) return send(res, 401, { error: 'UNAUTHORIZED' });
     try { const pong = await clamd('zPING\0'); return send(res, pong === 'PONG' ? 200 : 503, { ready: pong === 'PONG' }); }
@@ -70,5 +78,7 @@ http.createServer(async (req, res) => {
     if (/FOUND\s*$/.test(result)) return send(res, 200, { clean: false });
     if (/OK\s*$/.test(result)) return send(res, 200, { clean: true });
     return send(res, 503, { error: 'SCAN_INDETERMINATE' });
-  } catch { return send(res, 503, { error: 'SCAN_UNAVAILABLE' }); }
+  } catch {
+    return send(res, 503, { error: 'SCAN_UNAVAILABLE' });
+  }
 }).listen(port, '0.0.0.0');
