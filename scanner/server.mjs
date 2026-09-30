@@ -60,7 +60,8 @@ http.createServer(async (req, res) => {
     try {
       const pong = await clamd('zPING\0');
       return send(res, pong === 'PONG' ? 200 : 503, { ready: pong === 'PONG' });
-    } catch {
+    } catch (err) {
+      console.error('clamd health failed', err instanceof Error ? err.message : 'UNKNOWN');
       return send(res, 503, { ready: false });
     }
   }
