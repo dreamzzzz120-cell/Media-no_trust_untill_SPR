@@ -45,7 +45,7 @@ describe('publisher HTTP flow', () => {
   it('scans, persists, returns evidence, and restricts private retrieval', async () => {
     const form = new FormData(); form.append('file', new Blob([png], { type: 'image/png' }), 'sample.png');
     const result = await json('/v1/publisher/verify', keyA, { method: 'POST', body: form });
-    expect(result.status).toBe(201); expect(result.body.passportId).toBeTruthy();
+    expect(result.status).toBe(201); expect(result.body.passportId).toBeTruthy(); expect(result.body).not.toHaveProperty('verificationUrl'); expect(result.body).not.toHaveProperty('publicUrl');
     expect(result.body.assetSha256).toMatch(/^[a-f0-9]{64}$/);
     expect(Array.isArray(result.body.evidence)).toBe(true);
     const bindings=await json(`/v1/evidence/bindings/MEDIA/${result.body.passportId}`,keyA); expect(bindings.status).toBe(200); expect(Array.isArray(bindings.body.bindings)).toBe(true); expect((bindings.body.bindings as unknown[]).length).toBeGreaterThan(0);
@@ -53,6 +53,8 @@ describe('publisher HTTP flow', () => {
     expect((await json(`/v1/media/${id}`, keyA)).status).toBe(200);
     expect((await json(`/v1/media/${id}`, keyB)).status).toBe(404);
     expect((await json(`/v1/media/${id}/evidence`, keyB)).status).toBe(404);
+    expect((await fetch(url + `/public/${id}`)).status).toBe(404);
+    expect((await fetch(url + `/passport/${id}`)).status).toBe(404);
     expect((await json('/v1/recommendation/evaluate', keyB, { method: 'POST', body: JSON.stringify({ passportId: id }), headers: { 'content-type': 'application/json' } })).status).toBe(404);
   });
 });
