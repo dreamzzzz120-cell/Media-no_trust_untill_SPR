@@ -32,6 +32,8 @@ import { CustomerProjectionStore } from './customer-projections.js';
 import { PrivacyExecutionStore } from './privacy-execution.js';
 import { CommerceStore, verifyProviderSignature } from './commerce.js';
 import { canGrant, safeWebhookBodySize } from './security-gate.js';
+import { M2MStore } from './m2m-store.js';
+import { registerM2MRoutes } from './m2m-routes.js';
 
 const config = loadConfig();
 const app = Fastify({ logger: { level: config.LOG_LEVEL, redact: ['req.headers.authorization','req.headers.x-api-key','req.headers.x-billing-signature','req.headers.x-media-signature','req.headers.x-enforcement-signature','req.body.token','req.body.secret','headers.authorization','headers.x-api-key'] }, bodyLimit: config.MAX_UPLOAD_BYTES, requestTimeout: config.REQUEST_TIMEOUT_MS, trustProxy: config.TRUST_PROXY });
@@ -43,6 +45,7 @@ const kernelStore = createKernelStore(config.DATABASE_URL);
 const inventoryStore = createInventoryStore(config.DATABASE_URL);
 const governanceStore = createGovernanceStore(config.DATABASE_URL);
 const authorityStore = createAuthorityStore(config.DATABASE_URL);
+const m2mStore = new M2MStore(config.DATABASE_URL);
 const webhookDeliveryStore = config.DATABASE_URL ? new WebhookDeliveryStore(config.DATABASE_URL) : null;
 const customerProjectionStore = config.DATABASE_URL ? new CustomerProjectionStore(config.DATABASE_URL) : null;
 const privacyExecutionStore = config.DATABASE_URL ? new PrivacyExecutionStore(config.DATABASE_URL) : null;
@@ -104,6 +107,7 @@ app.post('/v1/organizations', async (req, reply) => { if (!requireRole(req, repl
 app.post('/v1/api-keys', async (req, reply) => { if (!requireRole(req, reply, ['super_admin','platform_admin','organization_admin'])) return; const identity = auth(req); const body = z.object({ organizationId: z.string().min(1), name: z.string().min(1).max(100), role: z.enum(roles as [ApiRole, ...ApiRole[]]) }).parse(req.body); if (identity.organizationId && identity.organizationId !== body.organizationId && identity.role !== 'super_admin' && identity.role !== 'platform_admin') return reply.code(403).send({ error: 'TENANT_MISMATCH' }); if (!canGrant(identity.role,body.role)) return reply.code(403).send({ error: 'ROLE_ESCALATION_DENIED' }); const created = await store.createApiKey(body.organizationId, body.name, body.role); return reply.code(201).send({ ...created, warning: 'The secret is returned once. Store it securely.' }); });
 const aiWriterRoles: ApiRole[] = ['analyst','organization_admin','platform_admin','super_admin'];
 function tenant(req: FastifyRequest, reply: FastifyReply): string | null { const id = auth(req).organizationId; if (!id) { void reply.code(403).send({ error: 'TENANT_KEY_REQUIRED' }); return null; } return id; }
+registerM2MRoutes(app,{config,authorityStore,kernelStore,m2mStore});
 const evidenceState=z.enum(['OBSERVED','VERIFIED','DECLARED','UNKNOWN','STALE','CONFLICTING','UNAVAILABLE']);const hash=z.string().regex(/^[a-f0-9]{64}$/);const metadata=z.record(z.string(),z.unknown()).default({});
 app.post('/v1/constellation/entities',async(req,reply)=>{if(!requireRole(req,reply,aiWriterRoles))return;const org=tenant(req,reply);if(!org)return;const b=z.object({entityType:z.enum(['AI_AGENT','MODEL','HUMAN','TOOL','API','DATABASE','OBSERVER','POLICY','SYSTEM','WORKLOAD','CREDENTIAL','ARTIFACT','UNKNOWN']),name:z.string().trim().min(1).max(160),evidenceState,evidenceHash:hash,source:z.string().min(1).max(200),firstObservedAt:z.iso.datetime({offset:true}),lastObservedAt:z.iso.datetime({offset:true}),metadata}).parse(req.body);return reply.code(201).send(await constellationStore.addEntity(org,b))});
 app.post('/v1/constellation/relationships',async(req,reply)=>{if(!requireRole(req,reply,aiWriterRoles))return;const org=tenant(req,reply);if(!org)return;const b=z.object({fromEntityId:z.uuid(),toEntityId:z.uuid(),relationshipType:z.enum(['ORBIT','CLUSTER','WORMHOLE','DEPENDENCY','INTERACTION','PROVENANCE','OBSERVATION','POLICY_APPLIES','TRANSIENT']),evidenceState,evidenceHash:hash,source:z.string().min(1).max(200),observedAt:z.iso.datetime({offset:true}),endedAt:z.iso.datetime({offset:true}).nullable().default(null),metadata}).parse(req.body);const v=await constellationStore.addRelationship(org,b);return v?reply.code(201).send(v):reply.code(404).send({error:'RELATED_ENTITY_NOT_FOUND'})});
