@@ -1,0 +1,1 @@
+import{describe,it,expect}from'vitest';import{retryDelay}from'../src/privacy-execution.js';describe('privacy execution recovery',()=>{it('uses bounded exponential retry',()=>{expect(retryDelay(1)).toBe(1000);expect(retryDelay(2)).toBe(2000);expect(retryDelay(99)).toBe(3600000)});it('never produces a zero/negative retry delay',()=>{expect(retryDelay(0)).toBeGreaterThan(0)})});
