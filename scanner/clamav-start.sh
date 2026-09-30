@@ -12,23 +12,25 @@ DatabaseDirectory /var/lib/clamav
 TCPSocket 3310
 TCPAddr 0.0.0.0
 MaxThreads 1
-MaxQueue 2
-MaxConnectionQueueLength 2
+MaxQueue 1
+MaxConnectionQueueLength 1
 ReadTimeout 120
 CommandReadTimeout 30
 SendBufTimeout 120
-StreamMaxLength 512M
-MaxScanSize 512M
-MaxFileSize 512M
-MaxRecursion 16
-MaxFiles 10000
+StreamMaxLength 256M
+MaxScanSize 256M
+MaxFileSize 256M
+MaxRecursion 12
+MaxFiles 5000
 ConcurrentDatabaseReload no
-Bytecode yes
+Bytecode no
 AlertBrokenExecutables yes
 EOF
 
-# Update signatures before accepting scans. If the update service is temporarily
-# unavailable but a valid bundled database exists, clamd can still start with it.
+# Railway production scanner is memory constrained. Updating and loading the
+# databases concurrently can push ClamAV over the service limit, so update
+# first, then start clamd with the bounded configuration above.
 freshclam --stdout || true
 
+# Keep clamd as PID 1 so Railway sees the real daemon lifecycle.
 exec clamd --config-file="$CONF"
