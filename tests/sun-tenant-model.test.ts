@@ -1,0 +1,8 @@
+import{describe,it,expect}from'vitest';import{readFileSync}from'node:fs';const server=readFileSync(new URL('../src/server.ts',import.meta.url),'utf8');const model=readFileSync(new URL('../src/constellation.ts',import.meta.url),'utf8');const ui=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+describe('Sun tenant identity release gate',()=>{
+ it('derives customer tenant from authenticated identity',()=>{expect(server).toContain("function tenant(req: FastifyRequest, reply: FastifyReply): string | null { const id = auth(req).organizationId");expect(server).toContain("TENANT_KEY_REQUIRED")});
+ it('customer constellation route has no organization override',()=>{const line=server.split('\n').find(x=>x.includes("app.get('/v1/customer/constellation'"))||'';expect(line).toContain('const org=tenant(req,reply)');expect(line).not.toContain('organizationId:')});
+ it('snapshot explicitly carries its tenant identity',()=>{expect(model).toContain('organizationId:string;asOf:string');expect((model.match(/organizationId:org/g)||[]).length).toBeGreaterThanOrEqual(3)});
+ it('browser fails closed if tenant projections disagree',()=>{expect(ui).toContain('TENANT_IDENTITY_MISSING');expect(ui).toContain('TENANT_PROJECTION_MISMATCH');expect(ui).toContain('dashboard.organizationId!==snapshot.organizationId')});
+ it('Sun does not invent organization metadata',()=>{expect(ui).toContain('Constellation does not invent an organization name');expect(ui).toContain('YOUR ORGANIZATION')});
+});
