@@ -25,8 +25,8 @@ export async function verifyMedia(
   const resolved = resolveEvidence(provenance, observations);
   const declared = asset.declaredAiUse ?? 'UNKNOWN';
   const detectedAi = resolved.synthetic;
-  const aiStatus = detectedAi ? (declared === 'AI_SYNTHETIC_PERSON' ? declared : declared === 'AI_SYNTHETIC_VOICE' ? declared : 'AI_GENERATED') : declared;
-  const disclosureConsistent = detectedAi ? declared !== 'NONE' && declared !== 'UNKNOWN' : true;
+  const aiStatus = detectedAi ? (declared === 'AI_SYNTHETIC_PERSON' ? declared : declared === 'AI_SYNTHETIC_VOICE' ? declared : 'AI_GENERATED') : 'UNKNOWN';
+  const disclosureConsistent = detectedAi ? declared !== 'NONE' && declared !== 'UNKNOWN' : declared === 'UNKNOWN' ? true : true;
   const highRisk = resolved.manipulation;
   const vector = buildTrustVector({ provenanceVerified: resolved.provenanceVerified, aiStatus, disclosureConsistent, observations });
   const trustScore = calculateTrustScore(vector);
@@ -42,6 +42,7 @@ export async function verifyMedia(
   ];
   if (provenance.status === 'absent') limitations.push('No supported C2PA provenance was embedded in the submitted asset.');
   if (provenance.status === 'error') limitations.push('C2PA validation could not complete for this asset.');
+  if (!detectedAi && declared !== 'UNKNOWN') limitations.push(`Submitted AI disclosure (${declared}) is a declaration and was not independently established by observed synthetic-media evidence.`);
   if (detectedAi && !disclosureConsistent) limitations.push('Detected synthetic-media evidence is inconsistent with the submitted AI disclosure.');
 
   return {
