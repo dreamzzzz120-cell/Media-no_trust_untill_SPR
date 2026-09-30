@@ -1,0 +1,32 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "echo \"Serving static Media UI from public/\"",
+  "outputDirectory": "public",
+  "rewrites": [
+    {
+      "source": "/health",
+      "destination": "https://media-api-production-4747.up.railway.app/health"
+    },
+    {
+      "source": "/ready",
+      "destination": "https://media-api-production-4747.up.railway.app/ready"
+    },
+    {
+      "source": "/ready/ai",
+      "destination": "https://media-api-production-4747.up.railway.app/ready/ai"
+    },
+    {
+      "source": "/v1/:path*",
+      "destination": "https://media-api-production-4747.up.railway.app/v1/:path*"
+    },
+    {
+      "source": "/passport/:path*",
+      "destination": "https://media-api-production-4747.up.railway.app/passport/:path*"
+    },
+    {
+      "source": "/public/:path*",
+      "destination": "https://media-api-production-4747.up.railway.app/public/:path*"
+    }
+  ]
+}
