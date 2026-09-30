@@ -21,7 +21,7 @@ export async function storeUpload(stream: NodeJS.ReadableStream, originalFilenam
   const hashing = new Transform({ transform(chunk, _encoding, callback) { bytes += Buffer.byteLength(chunk); if (bytes > maxBytes) return callback(new Error('UPLOAD_TOO_LARGE')); hash.update(chunk); callback(null, chunk); } });
   try {
     await pipeline(stream, hashing, createWriteStream(path, { flags: 'wx', mode: 0o600 })); const info = await stat(path); if (info.size === 0) throw new Error('EMPTY_UPLOAD');
-    const detected = await fileTypeFromFile(path); const declared = declaredMime.split(';')[0]?.toLowerCase() || 'application/octet-stream'; const mime = detected?.mime ?? declared; const kind = classifyMime(mime);
+    const detected = await fileTypeFromFile(path); const declared = declaredMime.split(';')[0]?.toLowerCase() || 'application/octet-stream'; if(!detected?.mime) throw new Error('MEDIA_SIGNATURE_UNRECOGNIZED'); const mime = detected.mime; const kind = classifyMime(mime);
     if (!kind) throw new Error('UNSUPPORTED_MEDIA_TYPE'); if (declared !== 'application/octet-stream' && declared !== mime) throw new Error('MIME_MISMATCH');
     return { id, path, sha256: hash.digest('hex'), sizeBytes: info.size, mime, kind, originalFilename: safeFilename(originalFilename) };
   } catch (error) { await unlink(path).catch(() => undefined); throw error; }
