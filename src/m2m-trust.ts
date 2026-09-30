@@ -22,7 +22,8 @@ export interface M2MVerificationContext {
  passportVerified:boolean|null;
  signatureVerified:boolean|null;
  nonceSeen:boolean;
- authority:AuthorityInput;
+ authority?:AuthorityInput;
+ authorityResult?:AuthorityResult;
 }
 
 export interface M2MDecision {
@@ -37,8 +38,10 @@ export interface M2MDecision {
 const canonical=(v:unknown):string=>{if(v===null||typeof v==='string'||typeof v==='boolean')return JSON.stringify(v);if(typeof v==='number'){if(!Number.isFinite(v))throw Error('NON_FINITE_VALUE');return JSON.stringify(v)}if(Array.isArray(v))return '['+v.map(canonical).join(',')+']';if(typeof v==='object'){const o=v as Record<string,unknown>;return '{'+Object.keys(o).sort().map(k=>JSON.stringify(k)+':'+canonical(o[k])).join(',')+'}'}throw Error('UNSUPPORTED_VALUE')};
 const digest=(v:unknown)=>createHash('sha256').update(canonical(v)).digest('hex');
 
+export function digestM2MEnvelope(e:M2MTrustEnvelope):string{return digest(e)}
+
 export function evaluateM2MTrust(e:M2MTrustEnvelope,c:M2MVerificationContext,now=new Date().toISOString()):M2MDecision{
- const authority=evaluateAuthority({...c.authority,now}),reasons:string[]=[],unknowns:string[]=[];
+ const authority=c.authorityResult??(c.authority?evaluateAuthority({...c.authority,now}):{id:randomUUID(),decision:'UNKNOWN' as const,reasons:['AUTHORITY_NOT_ESTABLISHED'],evaluatedAt:now}),reasons:string[]=[],unknowns:string[]=[];
  if(e.protocol!=='m2m-trust/1')reasons.push('UNSUPPORTED_PROTOCOL');
  const t=Date.parse(now),iat=Date.parse(e.issuedAt),exp=Date.parse(e.expiresAt);
  if(!Number.isFinite(t)||!Number.isFinite(iat)||!Number.isFinite(exp))reasons.push('INVALID_TIME');
