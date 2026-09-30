@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { createStore } from '../src/db.js';
 
-describe('API key authentication', () => {
+describe('API key authentication lifecycle', () => {
   it('stores only hashed keys and returns the scoped identity', async () => {
-    const store = createStore(undefined);
-    const created = await store.createApiKey('org-test', 'test', 'creator');
-    expect(created.key).toMatch(/^mp_/);
-    expect(await store.authenticateApiKey(created.key)).toEqual({ keyId: created.id, organizationId: 'org-test', role: 'creator' });
-    expect(await store.authenticateApiKey('mp_invalid')).toBeNull();
-    await store.close();
+    const store=createStore(undefined);const created=await store.createApiKey('org-test','test','creator');
+    expect(created.key).toMatch(/^mp_/);expect(await store.authenticateApiKey(created.key)).toEqual({keyId:created.id,organizationId:'org-test',role:'creator'});expect(await store.authenticateApiKey('mp_invalid')).toBeNull();await store.close();
   });
+  it('fails closed for expired keys',async()=>{const store=createStore(undefined);const created=await store.createApiKey('org-test','expired','viewer','2020-01-01T00:00:00.000Z');expect(await store.authenticateApiKey(created.key)).toBeNull();await store.close()});
+  it('revokes keys immediately',async()=>{const store=createStore(undefined);const created=await store.createApiKey('org-test','revoked','viewer');expect(await store.revokeApiKey('org-test',created.id)).toBe(true);expect(await store.authenticateApiKey(created.key)).toBeNull();expect(await store.revokeApiKey('org-test',created.id)).toBe(false);await store.close()});
+  it('rotates atomically from the caller perspective and invalidates the old secret',async()=>{const store=createStore(undefined);const old=await store.createApiKey('org-test','old','creator');const replacement=await store.rotateApiKey('org-test',old.id,'new','creator');expect(replacement).not.toBeNull();expect(await store.authenticateApiKey(old.key)).toBeNull();expect(await store.authenticateApiKey(replacement!.key)).toEqual({keyId:replacement!.id,organizationId:'org-test',role:'creator'});await store.close()});
+  it('does not expose key hashes or secrets from inventory',async()=>{const store=createStore(undefined);await store.createApiKey('org-test','inventory','analyst');const keys=await store.listApiKeys('org-test');expect(keys).toHaveLength(1);expect(keys[0]).toMatchObject({name:'inventory',role:'analyst',revokedAt:null});expect(JSON.stringify(keys)).not.toMatch(/mp_/);expect(JSON.stringify(keys)).not.toMatch(/keyHash|key_hash/);await store.close()});
 });
