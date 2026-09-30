@@ -153,7 +153,9 @@ app.post('/v1/ai/:id/events', async (req, reply) => {
  const organizationId = tenant(req, reply); if (!organizationId) return;
  const body = z.object({ eventType: z.enum(['OUTPUT','TOOL_REQUEST','TOOL_RESULT','ACTION_REQUESTED','ACTION_CONFIRMED','ACTION_FAILED','ACTION_UNAVAILABLE','APPROVAL_REQUESTED','APPROVAL_GRANTED','APPROVAL_DENIED','CONFIG_CHANGED']), sourceType: z.enum(['DECLARATION','DIRECT_OBSERVATION','AUTHORITATIVE_SYSTEM','SIGNED_ATTESTATION']), source: z.string().min(1).max(200), summary: z.string().min(1).max(1000), occurredAt: z.iso.datetime({ offset: true }), evidenceHash: z.string().regex(/^[a-f0-9]{64}$/), evidenceIds:z.array(z.uuid()).max(100) }).parse(req.body);
  if (body.sourceType !== 'DECLARATION') return reply.code(400).send({ error: 'SOURCE_NOT_VERIFIED', message: 'External API submissions are declarations until a trusted connector verifies the source.' });
+ if (Date.parse(body.occurredAt)>Date.now()+300000) return reply.code(400).send({error:'FUTURE_EVENT_NOT_ALLOWED'});
  if (['ACTION_CONFIRMED','ACTION_FAILED','ACTION_UNAVAILABLE','APPROVAL_GRANTED','APPROVAL_DENIED'].includes(body.eventType)) return reply.code(400).send({ error: 'TRUSTED_RESULT_REQUIRED' });
+ if(!body.evidenceIds.length)return reply.code(400).send({error:'FLIGHT_EVENT_REQUIRES_CANONICAL_EVIDENCE'});const lineage=await Promise.all(body.evidenceIds.map(id=>kernelStore.bind(organizationId,id,'AI_FLIGHT',(req.params as {id:string}).id,'SUPPORTS')));if(lineage.some(ok=>!ok))return reply.code(400).send({error:'CANONICAL_EVIDENCE_REQUIRED'});const canonicalHash=createHash('sha256').update([...body.evidenceIds].sort().join(':')).digest('hex');if(body.evidenceHash!==canonicalHash)return reply.code(400).send({error:'EVIDENCE_HASH_DOES_NOT_MATCH_CANONICAL_IDS'});
  const event = await aiStore.append(organizationId, (req.params as { id: string }).id, body);
  return event ? reply.code(201).send(event) : reply.code(404).send({ error: 'NOT_FOUND' });
 });
