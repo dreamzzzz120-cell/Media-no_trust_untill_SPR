@@ -3,6 +3,7 @@
   "framework": null,
   "buildCommand": "echo \"Serving static Media UI from public/\"",
   "outputDirectory": "public",
+  "trailingSlash": false,
   "rewrites": [
     {
       "source": "/health",
