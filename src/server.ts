@@ -27,6 +27,7 @@ import { createAuthorityStore } from './authority-store.js';
 import { executeDiscovery } from './shadow-ai-discovery.js';
 import { verifiedEnforcement } from './enforcement.js';
 import { persistEnforcementAttempt } from './enforcement-store.js';
+import { WebhookDeliveryStore } from './webhook-delivery.js';
 
 const config = loadConfig();
 const app = Fastify({ logger: { level: config.LOG_LEVEL, redact: ['req.headers.authorization', 'req.headers.x-api-key', 'headers.x-api-key'] }, bodyLimit: config.MAX_UPLOAD_BYTES, requestTimeout: config.REQUEST_TIMEOUT_MS, trustProxy: config.TRUST_PROXY });
@@ -38,6 +39,7 @@ const kernelStore = createKernelStore(config.DATABASE_URL);
 const inventoryStore = createInventoryStore(config.DATABASE_URL);
 const governanceStore = createGovernanceStore(config.DATABASE_URL);
 const authorityStore = createAuthorityStore(config.DATABASE_URL);
+const webhookDeliveryStore = config.DATABASE_URL ? new WebhookDeliveryStore(config.DATABASE_URL) : null;
 const idPattern = /^[A-Za-z0-9_-]{10,40}$/;
 const roles: ApiRole[] = ['viewer','creator','reviewer','moderator','analyst','organization_admin','platform_admin','super_admin'];
 const aiStatuses = ['NONE','AI_ASSISTED','AI_EDITED','AI_GENERATED','AI_SYNTHETIC_PERSON','AI_SYNTHETIC_VOICE','AI_DEEPFAKE','UNKNOWN'] as const;
@@ -72,6 +74,9 @@ app.get('/ready/ai', async (_req, reply) => {
  const databaseOk = await aiStore.ready();
  return reply.code(databaseOk ? 200 : 503).send({ status: databaseOk ? 'ready' : 'not_ready', scope: 'ai_registry_and_event_api', database: { ok: databaseOk }, mediaScanning: { status: 'NOT_ASSESSED', note: 'Use /ready for the media upload and malware scanner pipeline.' } });
 });
+app.get('/v1/webhooks/operations',async(req,reply)=>{if(!requireRole(req,reply,['organization_admin','platform_admin','super_admin']))return;const org=tenant(req,reply);if(!org)return;if(!webhookDeliveryStore)return reply.code(503).send({error:'WEBHOOK_STORE_UNAVAILABLE'});return{organizationId:org,queue:await webhookDeliveryStore.health(org)}});
+app.get('/v1/webhooks/deliveries/:id/history',async(req,reply)=>{if(!requireRole(req,reply,['organization_admin','platform_admin','super_admin']))return;const org=tenant(req,reply);if(!org)return;if(!webhookDeliveryStore)return reply.code(503).send({error:'WEBHOOK_STORE_UNAVAILABLE'});const id=z.uuid().parse((req.params as{id:string}).id);return{outboxId:id,attempts:await webhookDeliveryStore.history(org,id)}});
+app.post('/v1/webhooks/deliveries/:id/requeue',async(req,reply)=>{if(!requireRole(req,reply,['organization_admin','platform_admin','super_admin']))return;const org=tenant(req,reply);if(!org)return;if(!webhookDeliveryStore)return reply.code(503).send({error:'WEBHOOK_STORE_UNAVAILABLE'});const id=z.uuid().parse((req.params as{id:string}).id);const ok=await webhookDeliveryStore.requeue(org,id,auth(req).keyId);return ok?reply.code(202).send({status:'REQUEUED',outboxId:id}):reply.code(404).send({error:'DEAD_LETTER_NOT_FOUND'})});
 app.post('/v1/organizations', async (req, reply) => { if (!requireRole(req, reply, ['super_admin','platform_admin'])) return; const body = z.object({ name: z.string().trim().min(2).max(120) }).parse(req.body); const created = await store.createOrganization(body.name); return reply.code(201).send(created); });
 app.post('/v1/api-keys', async (req, reply) => { if (!requireRole(req, reply, ['super_admin','platform_admin','organization_admin'])) return; const identity = auth(req); const body = z.object({ organizationId: z.string().min(1), name: z.string().min(1).max(100), role: z.enum(roles as [ApiRole, ...ApiRole[]]) }).parse(req.body); if (identity.organizationId && identity.organizationId !== body.organizationId && identity.role !== 'super_admin' && identity.role !== 'platform_admin') return reply.code(403).send({ error: 'TENANT_MISMATCH' }); if (identity.role === 'organization_admin' && (body.role === 'super_admin' || body.role === 'platform_admin')) return reply.code(403).send({ error: 'ROLE_ESCALATION_DENIED' }); if (identity.role === 'platform_admin' && body.role === 'super_admin') return reply.code(403).send({ error: 'ROLE_ESCALATION_DENIED' }); const created = await store.createApiKey(body.organizationId, body.name, body.role); return reply.code(201).send({ ...created, warning: 'The secret is returned once. Store it securely.' }); });
 const aiWriterRoles: ApiRole[] = ['analyst','organization_admin','platform_admin','super_admin'];
