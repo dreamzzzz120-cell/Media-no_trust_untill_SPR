@@ -70,3 +70,5 @@ jobs:
         run: npm run migrate
       - name: Prove migrations are idempotent
         run: npm run migrate
+      - name: Run PostgreSQL failure/concurrency gate
+        run: npx vitest run tests/postgres-failure-gate.test.ts
