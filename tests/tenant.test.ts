@@ -9,3 +9,6 @@ describe('private passport access', () => {
     expect(canReadTenantRecord({ keyId: 'a', role: 'creator', organizationId: 'publisher-a' }, { asset: {} } as VerificationRecord)).toBe(false);
   });
 });
+
+
+it('does not let ordinary cross-tenant identities read another tenant passport',()=>{for(const role of ['viewer','creator','reviewer','moderator','analyst','organization_admin'] as const)expect(canReadTenantRecord({keyId:'x',role,organizationId:'publisher-b'},record)).toBe(false)});
