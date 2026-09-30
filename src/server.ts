@@ -71,7 +71,7 @@ app.addHook('onRequest', async (req, reply) => {
 function auth(req: { mediaAuth: ApiIdentity | null }): ApiIdentity { if (!req.mediaAuth) throw new Error('UNAUTHORIZED'); return req.mediaAuth; }
 const tenantReadRoles:ApiRole[]=['viewer','creator','reviewer','moderator','analyst','organization_admin','platform_admin','super_admin'];
 const sensitiveReadRoles:ApiRole[]=['reviewer','moderator','analyst','organization_admin','platform_admin','super_admin'];
-function requireRole(req:{mediaAuth:ApiIdentity|null},reply:any,allowed:ApiRole[]):boolean{const identity=auth(req);if(!allowed.includes(identity.role)){req.mediaAuth&&req.log?.warn?.({keyId:identity.keyId,organizationId:identity.organizationId,role:identity.role},'authorization rejected');void reply.code(403).send({error:'FORBIDDEN'});return false}return true}
+function requireRole(req:FastifyRequest & {mediaAuth:ApiIdentity|null},reply:any,allowed:ApiRole[]):boolean{const identity=auth(req);if(!allowed.includes(identity.role)){req.log.warn({keyId:identity.keyId,organizationId:identity.organizationId,role:identity.role},'authorization rejected');void reply.code(403).send({error:'FORBIDDEN'});return false}return true}
 function requireTenantRead(req:any,reply:any,sensitive=false):boolean{return requireRole(req,reply,sensitive?sensitiveReadRoles:tenantReadRoles)}
 app.get('/health', async () => ({ status: 'ok', service: 'media-passport', version: '1.0.0' }));
 app.get('/ready', async (_req, reply) => {
