@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -12,6 +12,7 @@ let root: string;
 let url: string;
 let keyA: string;
 let keyB: string;
+let scannerClean = true;
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2ioAAAAASUVORK5CYII=', 'base64');
 const listen = (server: Server): Promise<number> => new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve((server.address() as { port: number }).port)));
 async function json(path: string, key: string, options?: RequestInit) {
@@ -20,7 +21,7 @@ async function json(path: string, key: string, options?: RequestInit) {
 }
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), 'media-publisher-test-'));
-  scanner = createServer((_req, res) => { res.setHeader('content-type', 'application/json'); res.end('{"clean":true}'); });
+  scanner = createServer((_req, res) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({clean:scannerClean})); });
   const scannerPort = await listen(scanner);
   const probe = createServer(); const appPort = await listen(probe); await new Promise<void>((resolve) => probe.close(() => resolve()));
   url = `http://127.0.0.1:${appPort}`;
@@ -40,16 +41,22 @@ describe('publisher HTTP flow', () => {
     const r = await json('/v1/api-keys', keyA, { method: 'POST', body: JSON.stringify({ organizationId: 'publisher-a', name: 'elevated', role: 'super_admin' }), headers: { 'content-type': 'application/json' } });
     expect(r.status).toBe(403);
   });
+  it('fails closed on malware and leaves no stored source bytes', async () => { scannerClean=false; try { const form=new FormData(); form.append('file',new Blob([png],{type:'image/png'}),'malicious.png'); const result=await json('/v1/publisher/verify',keyA,{method:'POST',body:form}); expect(result.status).toBe(422); const quarantine=await readdir(join(root,'quarantine')).catch(()=>[]); const clean=await readdir(join(root,'clean')).catch(()=>[]); expect(quarantine).toHaveLength(0); expect(clean).toHaveLength(0); } finally { scannerClean=true; } });
   it('scans, persists, returns evidence, and restricts private retrieval', async () => {
     const form = new FormData(); form.append('file', new Blob([png], { type: 'image/png' }), 'sample.png');
     const result = await json('/v1/publisher/verify', keyA, { method: 'POST', body: form });
-    expect(result.status).toBe(201); expect(result.body.passportId).toBeTruthy();
+    expect(result.status).toBe(201); expect(result.body.passportId).toBeTruthy(); expect(result.body).not.toHaveProperty('verificationUrl'); expect(result.body).not.toHaveProperty('publicUrl');
     expect(result.body.assetSha256).toMatch(/^[a-f0-9]{64}$/);
     expect(Array.isArray(result.body.evidence)).toBe(true);
+    const bindings=await json(`/v1/evidence/bindings/MEDIA/${result.body.passportId}`,keyA); expect(bindings.status).toBe(200); expect(Array.isArray(bindings.body.bindings)).toBe(true); expect((bindings.body.bindings as unknown[]).length).toBeGreaterThan(0);
     const id = result.body.passportId;
     expect((await json(`/v1/media/${id}`, keyA)).status).toBe(200);
     expect((await json(`/v1/media/${id}`, keyB)).status).toBe(404);
     expect((await json(`/v1/media/${id}/evidence`, keyB)).status).toBe(404);
+    expect((await fetch(url + `/public/${id}`)).status).toBe(404);
+    expect((await fetch(url + `/passport/${id}`)).status).toBe(404);
     expect((await json('/v1/recommendation/evaluate', keyB, { method: 'POST', body: JSON.stringify({ passportId: id }), headers: { 'content-type': 'application/json' } })).status).toBe(404);
   });
 });
+
+describe('publisher retry contract',()=>{it('binds an idempotency key to identical content and rejects reuse for different bytes',async()=>{const key='publisher-retry-contract-1';const one=new FormData();one.append('file',new Blob([png],{type:'image/png'}),'one.png');const first=await json('/v1/publisher/verify',keyA,{method:'POST',body:one,headers:{'idempotency-key':key}});expect(first.status).toBe(201);const two=new FormData();two.append('file',new Blob([Buffer.concat([png,Buffer.from('different')])],{type:'image/png'}),'two.png');const second=await json('/v1/publisher/verify',keyA,{method:'POST',body:two,headers:{'idempotency-key':key}});expect(second.status).not.toBe(201);});});

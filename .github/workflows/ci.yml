@@ -38,3 +38,35 @@ jobs:
 
       - name: Run release checks
         run: npm run check
+
+  migration-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: media
+          POSTGRES_PASSWORD: media
+          POSTGRES_DB: media
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U media -d media"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://media:media@localhost:5432/media
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22.22.0
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --fund=false
+      - run: npm run build
+      - name: Apply every migration to real PostgreSQL
+        run: npm run migrate
+      - name: Prove migrations are idempotent
+        run: npm run migrate

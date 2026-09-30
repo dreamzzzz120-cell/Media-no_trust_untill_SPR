@@ -1,0 +1,6 @@
+import{describe,it,expect}from'vitest';import{runCollector,evidenceDigest}from'../src/collectors.js';
+describe('Satellite collector contract',()=>{
+ it('preserves valid observed evidence',async()=>{const c={key:'code',version:'1',collect:async(s:{type:string;id:string})=>({collectorKey:'code',collectorVersion:'1',subjectType:s.type,subjectId:s.id,health:'HEALTHY' as const,coverage:'OBSERVED' as const,observedAt:'2026-09-29T10:00:00Z',collectedAt:'2026-09-29T10:00:01Z',payload:{ok:true},evidenceHash:evidenceDigest({ok:true}),limitations:[]})};expect((await runCollector(c,{type:'repo',id:'r'})).coverage).toBe('OBSERVED')});
+ it('converts collector failure to UNKNOWN instead of PASS',async()=>{const c={key:'cost',version:'1',collect:async()=>{throw Error('provider down')}};const r=await runCollector(c,{type:'account',id:'a'});expect(r.coverage).toBe('UNKNOWN');expect(r.health).toBe('UNKNOWN')});
+ it('rejects identity mismatch into UNKNOWN',async()=>{const c={key:'policy',version:'1',collect:async()=>({collectorKey:'other',collectorVersion:'1',subjectType:'x',subjectId:'y',health:'HEALTHY' as const,coverage:'OBSERVED' as const,observedAt:'x',collectedAt:'x',payload:{},evidenceHash:'a'.repeat(64),limitations:[]})};expect((await runCollector(c,{type:'x',id:'y'})).coverage).toBe('UNKNOWN')});
+});

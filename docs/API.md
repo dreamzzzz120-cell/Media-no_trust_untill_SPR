@@ -36,9 +36,9 @@ Roles: `viewer`, `creator`, `reviewer`, `moderator`, `analyst`, `organization_ad
 
 ## Public verification
 
-`GET /public/:id` returns a privacy-minimized Passport representation. It never serves original media bytes.
+`GET /public/:id` is closed (`404`) until durable, tenant-authorized publication state exists.
 
-`GET /passport/:id` renders a human-readable Passport page with trust vector, evidence and limitations.
+`GET /passport/:id` is closed (`404`) until durable, tenant-authorized publication state exists.
 
 ## Health
 
@@ -52,7 +52,7 @@ Roles: `viewer`, `creator`, `reviewer`, `moderator`, `analyst`, `organization_ad
 
 ## Publisher integration (one upload, one result)
 
-Create an organization-scoped `creator` or `organization_admin` API key. Keep it on the publisher's server; do not put it in a browser bundle. In the publisher's existing upload workflow, send the uploaded media bytes to `POST /v1/publisher/verify` as multipart field `file`. This route requires an organization-scoped key and returns `201` with `passportId`, the exact-file SHA-256, decision, confidence, AI status, provenance, evidence, limitations, and result URLs. Keep publishing decisions in the publisher's own workflow; an `UNVERIFIED` result is not proof of human origin.
+Create an organization-scoped `creator` or `organization_admin` API key. Keep it on the publisher's server; do not put it in a browser bundle. In the publisher's existing upload workflow, send the uploaded media bytes to `POST /v1/publisher/verify` as multipart field `file`. This route requires an organization-scoped key and returns `201` with `passportId`, the exact-file SHA-256, decision, confidence, AI status, provenance, evidence, limitations, and a tenant-scoped private result URL. Keep publishing decisions in the publisher's own workflow; an `UNVERIFIED` result is not proof of human origin.
 
 ```sh
 curl --fail-with-body -X POST "$MEDIA_PASSPORT_URL/v1/publisher/verify" \
@@ -61,4 +61,4 @@ curl --fail-with-body -X POST "$MEDIA_PASSPORT_URL/v1/publisher/verify" \
   -F 'file=@./upload.mp4;type=video/mp4'
 ```
 
-The publisher may retrieve its private result with `GET /v1/media/:id` using the same tenant key and display `verificationUrl` to an operator. Private result endpoints return `404` for records belonging to another organization. Public passport URLs are intentionally accessible to anyone with the URL and must be evaluated for the publisher's privacy requirements before sharing. A malware or validation failure does not create a passport; handle `422`, `413`, `415`, and `503` as failed intake or retry as appropriate. Production requires PostgreSQL, the scanner, and configured storage controls before this flow can operate.
+The publisher may retrieve its private result with `GET /v1/media/:id` using the same tenant key Private result endpoints return `404` for records belonging to another organization. Public passport URLs are disabled until publication authorization and durable sharing state exist. A malware or validation failure does not create a passport; handle `422`, `413`, `415`, and `503` as failed intake or retry as appropriate. Production requires PostgreSQL, the scanner, and configured storage controls before this flow can operate.

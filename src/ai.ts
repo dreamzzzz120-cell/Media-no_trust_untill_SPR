@@ -26,7 +26,7 @@ const digest = (value: string) => createHash('sha256').update(value).digest('hex
 const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 function makeEvent(aiId: string, input: EventInput, previousHash: string | null, state: EvidenceState = 'DECLARED', relatedEventId: string | null = null): AiEvent {
  const event = { id: randomUUID(), aiId, ...input, occurredAt: new Date(input.occurredAt).toISOString(), recordedAt: new Date().toISOString(), previousHash, state, relatedEventId };
- return { ...event, eventHash: digest(JSON.stringify(event)) };
+ const canonical={id:event.id,aiId:event.aiId,eventType:event.eventType,sourceType:event.sourceType,source:event.source,summary:event.summary,occurredAt:event.occurredAt,evidenceHash:event.evidenceHash,recordedAt:event.recordedAt,previousHash:event.previousHash,state:event.state,relatedEventId:event.relatedEventId}; return { ...event, eventHash: digest(JSON.stringify(canonical)) };
 }
 function eventDigest(e: AiEvent) { return digest(JSON.stringify({ id:e.id, aiId:e.aiId, eventType:e.eventType, sourceType:e.sourceType, source:e.source, summary:e.summary, occurredAt:e.occurredAt, evidenceHash:e.evidenceHash, recordedAt:e.recordedAt, previousHash:e.previousHash, state:e.state, relatedEventId:e.relatedEventId })); }
 function checkChain(events: AiEvent[], ledgerHashes?: Map<string, string>): AiIntegrity {
