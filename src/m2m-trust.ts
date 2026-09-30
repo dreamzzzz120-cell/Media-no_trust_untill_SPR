@@ -16,6 +16,7 @@ export interface M2MTrustEnvelope {
  expiresAt:string;
  nonce:string;
  evidenceDigest?:string|null;
+ signature?:{alg:'HS256';keyId:string;value:string}|null;
 }
 
 export interface M2MVerificationContext {
@@ -38,7 +39,7 @@ export interface M2MDecision {
 const canonical=(v:unknown):string=>{if(v===null||typeof v==='string'||typeof v==='boolean')return JSON.stringify(v);if(typeof v==='number'){if(!Number.isFinite(v))throw Error('NON_FINITE_VALUE');return JSON.stringify(v)}if(Array.isArray(v))return '['+v.map(canonical).join(',')+']';if(typeof v==='object'){const o=v as Record<string,unknown>;return '{'+Object.keys(o).sort().map(k=>JSON.stringify(k)+':'+canonical(o[k])).join(',')+'}'}throw Error('UNSUPPORTED_VALUE')};
 const digest=(v:unknown)=>createHash('sha256').update(canonical(v)).digest('hex');
 
-export function digestM2MEnvelope(e:M2MTrustEnvelope):string{return digest(e)}
+export function digestM2MEnvelope(e:M2MTrustEnvelope):string{const{signature:_signature,...unsigned}=e;return digest(unsigned)}
 
 export function evaluateM2MTrust(e:M2MTrustEnvelope,c:M2MVerificationContext,now=new Date().toISOString()):M2MDecision{
  const authority=c.authorityResult??(c.authority?evaluateAuthority({...c.authority,now}):{id:randomUUID(),decision:'UNKNOWN' as const,reasons:['AUTHORITY_NOT_ESTABLISHED'],evaluatedAt:now}),reasons:string[]=[],unknowns:string[]=[];
