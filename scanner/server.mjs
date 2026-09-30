@@ -1,12 +1,15 @@
 import http from 'node:http';
 import net from 'node:net';
 import { timingSafeEqual } from 'node:crypto';
+import { stat } from 'node:fs/promises';
 
 const port = Number(process.env.PORT || 8080);
 const host = process.env.CLAMD_HOST;
 const clamdPort = Number(process.env.CLAMD_PORT || 3310);
 const token = process.env.MALWARE_SCAN_TOKEN;
 const maxBytes = Number(process.env.MAX_SCAN_BYTES || 524288000);
+const maxSignatureAgeMs = Number(process.env.MAX_SIGNATURE_AGE_MS || 172800000);
+async function signatureFresh(){try{const files=['/var/lib/clamav/daily.cvd','/var/lib/clamav/daily.cld','/var/lib/clamav/main.cvd','/var/lib/clamav/main.cld'];const stats=[];for(const p of files)try{stats.push(await stat(p))}catch{};if(!stats.length)return false;const newest=Math.max(...stats.map(s=>s.mtimeMs));return Number.isFinite(newest)&&Date.now()-newest<=maxSignatureAgeMs}catch{return false}}
 if (!host || !token || token.length < 32 || !Number.isInteger(port) || !Number.isInteger(clamdPort) || !Number.isSafeInteger(maxBytes) || maxBytes < 1) {
   throw new Error('CLAMD_HOST, strong MALWARE_SCAN_TOKEN, and valid ports/limit are required');
 }
@@ -58,19 +61,20 @@ const send = (res, status, body) => {
 http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/health') {
     try {
-      const pong = await clamd('zPING\0');
-      return send(res, pong === 'PONG' ? 200 : 503, { ready: pong === 'PONG' });
+      const pong = await clamd('zPING\0'); const signatures=await signatureFresh();
+      return send(res, pong === 'PONG' && signatures ? 200 : 503, { ready: pong === 'PONG' && signatures, daemon: pong === 'PONG', signaturesFresh: signatures });
     } catch {
       return send(res, 503, { ready: false });
     }
   }
   if (req.method === 'GET' && req.url === '/ready') {
     if (!equal(req.headers.authorization, 'Bearer ' + token)) return send(res, 401, { error: 'UNAUTHORIZED' });
-    try { const pong = await clamd('zPING\0'); return send(res, pong === 'PONG' ? 200 : 503, { ready: pong === 'PONG' }); }
+    try { const pong = await clamd('zPING\0'); const signatures=await signatureFresh(); return send(res, pong === 'PONG' && signatures ? 200 : 503, { ready: pong === 'PONG' && signatures, daemon: pong === 'PONG', signaturesFresh: signatures }); }
     catch { return send(res, 503, { ready: false }); }
   }
   if (req.method !== 'POST' || req.url !== '/scan') return send(res, 404, { error: 'NOT_FOUND' });
   if (!equal(req.headers.authorization, 'Bearer ' + token)) return send(res, 401, { error: 'UNAUTHORIZED' });
+  if(!(await signatureFresh())) return send(res,503,{error:'SIGNATURES_STALE_OR_UNKNOWN'});
   const length = Number(req.headers['content-length']);
   if (!Number.isSafeInteger(length) || length < 1 || length > maxBytes) return send(res, 413, { error: 'INVALID_SIZE' });
   try {
