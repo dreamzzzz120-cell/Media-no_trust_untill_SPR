@@ -8,6 +8,7 @@ const canonical=(v:unknown):string=>{if(v===null||typeof v==='string'||typeof v=
 const digest=(v:unknown)=>createHash('sha256').update(canonical(v)).digest('hex');
 const seal=(x:Omit<ExecutionReceipt,'receiptDigest'>):ExecutionReceipt=>({...x,receiptDigest:digest(x)});
 export async function executeGoverned(req:ExecutionRequest,executor:(payload:unknown)=>Promise<ExternalExecutionReceipt>,now=()=>new Date()):Promise<ExecutionReceipt>{
+ if(!req.idempotencyKey||!req.idempotencyKey.trim()||req.idempotencyKey.length>200)throw Error('EXECUTION_IDEMPOTENCY_KEY_REQUIRED');
  const gate=executionGate(req.authority), base={id:randomUUID(),organizationId:req.organizationId,actorEntityId:req.actorEntityId,actionType:req.actionType,targetReference:req.targetReference??null,payloadDigest:digest(req.payload),idempotencyKey:req.idempotencyKey??null,gate,authorityDecision:req.authority.decision,authorityEvaluationId:req.authority.id,occurredAt:now().toISOString()};
  if(gate==='DENY_EXECUTION')return seal({...base,outcome:'DENIED_NOT_EXECUTED',evidenceState:'OBSERVED'});
  if(gate==='HOLD_UNKNOWN')return seal({...base,outcome:'UNKNOWN',evidenceState:'UNKNOWN'});
