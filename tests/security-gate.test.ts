@@ -1,0 +1,7 @@
+import{describe,it,expect}from'vitest';import{assertPublicHttps,canGrant,safeChild,safeWebhookBodySize}from'../src/security-gate.js';
+describe('release-blocking security gate',()=>{
+ it('enforces authorization grant matrix without privilege escalation',()=>{expect(canGrant('organization_admin','viewer')).toBe(true);expect(canGrant('organization_admin','organization_admin')).toBe(true);expect(canGrant('organization_admin','platform_admin')).toBe(false);expect(canGrant('organization_admin','super_admin')).toBe(false);expect(canGrant('platform_admin','super_admin')).toBe(false);expect(canGrant('viewer','creator')).toBe(false)});
+ it('blocks webhook SSRF and credential-bearing destinations',()=>{for(const u of ['http://example.com/hook','https://127.0.0.1/h','https://10.0.0.1/h','https://169.254.169.254/latest','https://192.168.1.2/h','https://172.16.0.1/h','https://[::1]/h','https://localhost/h','https://user:pass@example.com/h','https://example.com:8443/h'])expect(()=>assertPublicHttps(u)).toThrow();expect(assertPublicHttps('https://hooks.example.com/v1')).toBeInstanceOf(URL)});
+ it('rejects path traversal after normalization',()=>{expect(safeChild('/srv/media','/srv/media/quarantine/a')).toBe(true);expect(safeChild('/srv/media','/srv/media/../secret')).toBe(false);expect(safeChild('/srv/media','/srv/media-evil/x')).toBe(false)});
+ it('bounds unauthenticated webhook bodies',()=>{expect(()=>safeWebhookBodySize('x'.repeat(2049),2048)).toThrow('WEBHOOK_BODY_TOO_LARGE');expect(safeWebhookBodySize('ok',2048)).toBe('ok')});
+});
