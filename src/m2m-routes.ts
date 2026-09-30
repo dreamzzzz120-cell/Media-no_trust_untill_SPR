@@ -4,7 +4,7 @@ import type { Config } from './config.js';
 import type { AuthorityStore } from './authority-store.js';
 import type { KernelStore } from './evidence-store.js';
 import { M2MStore } from './m2m-store.js';
-import { digestM2MEnvelope, type M2MTrustEnvelope } from './m2m-trust.js';
+import { type M2MTrustEnvelope } from './m2m-trust.js';
 import { evaluateNetworkTrust, postReceiptToSpr, receiptDigest, sprVerifyPassport, verifyEnvelopeHmac } from './m2m-network.js';
 
 const hex64=z.string().regex(/^[a-f0-9]{64}$/);
