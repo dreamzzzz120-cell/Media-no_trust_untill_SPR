@@ -23,6 +23,7 @@ ALTER TABLE export_artifacts ADD CONSTRAINT export_artifacts_job_org_fk FOREIGN 
 -- Approval evidence cannot self-approve and cannot outlive an explicit expiry boundary.
 ALTER TABLE universe_approvals ADD CONSTRAINT universe_approval_no_self_approval CHECK(approver_entity_id IS NULL OR approver_entity_id<>actor_entity_id);
 ALTER TABLE universe_approvals ADD CONSTRAINT universe_approval_validity_order CHECK(valid_until IS NULL OR valid_until>decided_at);
+CREATE UNIQUE INDEX IF NOT EXISTS universe_approval_replay_uq ON universe_approvals(organization_id,requirement_id,mission_id,actor_entity_id,approver_entity_id,evidence_hash) WHERE approver_entity_id IS NOT NULL;
 
 -- Delegations are bounded in depth and time by their parent chain, not only by local row shape.
 CREATE OR REPLACE FUNCTION enforce_delegation_bounds() RETURNS trigger LANGUAGE plpgsql AS $$
