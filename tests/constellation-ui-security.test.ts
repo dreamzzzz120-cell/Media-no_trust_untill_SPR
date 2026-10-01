@@ -10,4 +10,8 @@ describe('Constellation production UI security gate',()=>{
  it('rejects malformed credential input before requests',()=>{expect(app).toContain('validApiKey');expect(html).toContain('maxlength="512"');expect(html).toContain('spellcheck="false"');});
  it('allowlists UI routes instead of trusting arbitrary fragments',()=>{expect(app).toContain('ALLOWED_VIEWS');expect(app).toContain("ALLOWED_VIEWS.has(raw)");});
  it('aborts requests and clears the credential on page lifecycle exit',()=>{expect(app).toContain("window.addEventListener('pagehide'");expect(app).toContain("$('key').value=''");});
+ it('bounds hostile response rendering',()=>{expect(app).toContain('MAX_RENDER');expect(app).toContain('boundedArray');expect(app).toContain('metadataChars:20000');});
+ it('validates tenant projection identity before rendering',()=>{expect(app).toContain('validSnapshot');expect(app).toContain('validDashboard');expect(app).toContain('TENANT_PROJECTION_MISMATCH');});
+ it('redacts unexpected browser errors',()=>{expect(app).toContain('SAFE_ERRORS');expect(app).toContain("safeError=e=>");});
+ it('binds report mutations to the verified tenant generation',()=>{expect(app).toContain('mutationGeneration');expect(app).toContain('mutationOrg');expect(app).toContain("state.snapshot?.organizationId!==mutationOrg");});
 });
