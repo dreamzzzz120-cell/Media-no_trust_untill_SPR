@@ -35,6 +35,7 @@ import { canGrant, safeWebhookBodySize } from './security-gate.js';
 import { StarDnaStore } from './star-dna.js';
 import { classifyRoute, RATE_LIMITS } from './operational-hardening.js';
 import { TenantQuotaStore } from './tenant-quota.js';
+import { startEmbeddedWorkers } from './embedded-workers.js';
 
 const config = loadConfig();
 const app = Fastify({ logger: { level: config.LOG_LEVEL, redact: ['req.headers.authorization','req.headers.x-api-key','req.headers.x-billing-signature','req.headers.x-media-signature','req.headers.x-enforcement-signature','req.body.token','req.body.secret','headers.authorization','headers.x-api-key'] }, bodyLimit: config.MAX_UPLOAD_BYTES, requestTimeout: config.REQUEST_TIMEOUT_MS, trustProxy: config.TRUST_PROXY });
@@ -52,6 +53,7 @@ const privacyExecutionStore = config.DATABASE_URL ? new PrivacyExecutionStore(co
 const commerceStore = config.DATABASE_URL ? new CommerceStore(config.DATABASE_URL) : null;
 const starDnaStore = config.DATABASE_URL ? new StarDnaStore(config.DATABASE_URL) : null;
 const tenantQuotaStore = config.DATABASE_URL ? new TenantQuotaStore(config.DATABASE_URL,{statementTimeoutMs:Math.min(config.DB_STATEMENT_TIMEOUT_MS,5000)}) : null;
+if(config.RUN_EMBEDDED_WORKERS&&config.DATABASE_URL)startEmbeddedWorkers(config.DATABASE_URL,(x,m)=>app.log.error(x,m));
 const idPattern = /^[A-Za-z0-9_-]{10,40}$/;
 const roles: ApiRole[] = ['viewer','creator','reviewer','moderator','analyst','organization_admin','platform_admin','super_admin'];
 const aiStatuses = ['NONE','AI_ASSISTED','AI_EDITED','AI_GENERATED','AI_SYNTHETIC_PERSON','AI_SYNTHETIC_VOICE','AI_DEEPFAKE','UNKNOWN'] as const;
