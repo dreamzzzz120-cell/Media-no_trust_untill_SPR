@@ -35,6 +35,8 @@ function checkChain(events: AiEvent[], ledgerHashes?: Map<string, string>): AiIn
  return { state: failures.length ? 'BROKEN' : events.length ? 'VALID_INTERNAL_CHAIN' : 'EMPTY', checkedEvents: events.length, failures, externalAnchor: 'NOT_CONFIGURED' };
 }
 function confirmation(aiId: string, claim: AiEvent, input: ConfirmationInput, previousHash: string | null) {
+ const occurred=Date.parse(input.occurredAt),claimed=Date.parse(claim.occurredAt),now=Date.now();
+ if(!Number.isFinite(occurred)||!Number.isFinite(claimed)||occurred<claimed||occurred>now+300000)throw new Error('INVALID_CONFIRMATION_TIME');
  const decision = reconcileAction(claim.summary, input.outcome, true);
  const event = makeEvent(aiId, { eventType: input.outcome === 'CONFIRMED' ? 'ACTION_CONFIRMED' : input.outcome === 'UNREACHABLE' ? 'ACTION_UNAVAILABLE' : 'ACTION_FAILED', sourceType: 'AUTHORITATIVE_SYSTEM', source: input.source, summary: decision.explanation, occurredAt: input.occurredAt, evidenceHash: input.evidenceHash }, previousHash, decision.state, claim.id);
  const alert: AiAlert | null = decision.alert ? { id: randomUUID(), aiId, claimEventId: claim.id, resultEventId: event.id, severity: decision.alert, summary: decision.explanation, createdAt: event.recordedAt } : null;
