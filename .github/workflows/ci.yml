@@ -82,3 +82,5 @@ jobs:
         run: npx vitest run tests/cross-tenant-object-ids-postgres.test.ts
       - name: Run pooled tenant-context reset gate
         run: npx vitest run tests/tenant-pool-reset-postgres.test.ts
+      - name: Run authority/delegation cross-tenant ID attack gate
+        run: npx vitest run tests/authority-object-ids-postgres.test.ts
