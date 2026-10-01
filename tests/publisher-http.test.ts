@@ -21,7 +21,7 @@ async function json(path: string, key: string, options?: RequestInit) {
 }
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), 'media-publisher-test-'));
-  scanner = createServer((_req, res) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({clean:scannerClean})); });
+  scanner = createServer((req, res) => { res.setHeader('content-type', 'application/json'); if(req.url==='/ready')res.end(JSON.stringify({ready:true,daemon:true,signaturesFresh:true})); else res.end(JSON.stringify({clean:scannerClean})); });
   const scannerPort = await listen(scanner);
   const probe = createServer(); const appPort = await listen(probe); await new Promise<void>((resolve) => probe.close(() => resolve()));
   url = `http://127.0.0.1:${appPort}`;
