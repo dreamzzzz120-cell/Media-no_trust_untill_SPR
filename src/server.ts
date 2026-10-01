@@ -57,14 +57,14 @@ if(config.RUN_EMBEDDED_WORKERS&&config.DATABASE_URL)startEmbeddedWorkers(config.
 const idPattern = /^[A-Za-z0-9_-]{10,40}$/;
 const roles: ApiRole[] = ['viewer','creator','reviewer','moderator','analyst','organization_admin','platform_admin','super_admin'];
 const aiStatuses = ['NONE','AI_ASSISTED','AI_EDITED','AI_GENERATED','AI_SYNTHETIC_PERSON','AI_SYNTHETIC_VOICE','AI_DEEPFAKE','UNKNOWN'] as const;
-await app.register(helmet, { global: true });
+await app.register(helmet, { global: true, contentSecurityPolicy:{directives:{defaultSrc:["'self'"],scriptSrc:["'self'"],styleSrc:["'self'"],imgSrc:["'self'","data:"],connectSrc:["'self'"],objectSrc:["'none'"],baseUri:["'none'"],frameAncestors:["'none'"]}}, hsts:{maxAge:31536000,includeSubDomains:true,preload:true}, referrerPolicy:{policy:'no-referrer'}, frameguard:{action:'deny'}, noSniff:true });
 await app.register(rateLimit, { max: config.RATE_LIMIT_MAX, timeWindow: config.RATE_LIMIT_WINDOW_MS });
 app.addHook('onRoute',(route:any)=>{const cls=classifyRoute(String(route.method),String(route.url));const limit=RATE_LIMITS[cls];route.config={...(route.config??{}),rateLimit:{max:limit.max,timeWindow:limit.windowMs}}});
 await app.register(multipart, { limits: { fileSize: config.MAX_UPLOAD_BYTES, files: 1, fields: 8 } });
 await app.register(fastifyStatic, { root: resolve('public'), prefix: '/' });
 await app.register(swagger, { openapi: { info: { title: 'Media Passport API', version: '1.0.0' }, servers: [{ url: '/' }], tags: [{ name: 'media' }, { name: 'passport' }, { name: 'trust' }, { name: 'cases' }, { name: 'admin' }] } });
 await app.register(swaggerUi, { routePrefix: '/docs' });
-const publicPath = (url: string) => { const path = new URL(url, 'http://localhost').pathname; return path === '/health' || path === '/ready' || path === '/ready/ai' || path === '/' || path === '/v1/integrations/action-confirmations' || path === '/v1/billing/provider-events' || path.startsWith('/public/') || path.startsWith('/passport/') || path.startsWith('/app.') || path.startsWith('/styles.') || path.startsWith('/passport.') || path === '/ai.html' || path === '/ai.js' || path === '/docs' || path.startsWith('/docs/'); };
+const publicPath = (url: string) => { const path = new URL(url, 'http://localhost').pathname; return path === '/health' || path === '/status' || path === '/ready' || path === '/ready/ai' || path === '/' || path === '/v1/integrations/action-confirmations' || path === '/v1/billing/provider-events' || path.startsWith('/public/') || path.startsWith('/passport/') || path.startsWith('/app.') || path.startsWith('/styles.') || path.startsWith('/passport.') || path === '/ai.html' || path === '/ai.js' || path === '/docs' || path.startsWith('/docs/'); };
 app.decorateRequest('mediaAuth', null);
 app.addHook('onRequest', async (req, reply) => {
   if (publicPath(req.url) || !config.REQUIRE_API_KEY) return;
@@ -84,6 +84,7 @@ function requireRole(req:FastifyRequest & {mediaAuth:ApiIdentity|null},reply:any
 function requireTenantRead(req:any,reply:any,sensitive=false):boolean{return requireRole(req,reply,sensitive?sensitiveReadRoles:tenantReadRoles)}
 app.addHook('preHandler',async(req,reply)=>{if(publicPath(req.url)||!req.mediaAuth?.organizationId||!tenantQuotaStore)return;const path=new URL(req.url,'http://localhost').pathname;const cls=classifyRoute(req.method,path);const lim=RATE_LIMITS[cls];const q=await tenantQuotaStore.consume(req.mediaAuth.organizationId,cls,lim.max,lim.windowMs);reply.header('x-ratelimit-remaining',String(q.remaining));if(q.resetAt)reply.header('x-ratelimit-reset',q.resetAt);if(!q.allowed)return reply.code(429).send({error:'TENANT_RATE_LIMITED',rateClass:cls,resetAt:q.resetAt})});
 app.get('/health', async () => ({ status: 'ok', service: 'constellation', version: '1.0.0', release: config.RELEASE_COMMIT }));
+app.get('/status',async(_req,reply)=>{const database=await store.ready();const scanner=await scannerReady(config.MALWARE_SCAN_URL,config.MALWARE_SCAN_TOKEN,config.MALWARE_SCAN_TIMEOUT_MS);const operational=database&&scanner;return reply.code(operational?200:503).send({status:operational?'OPERATIONAL':'DEGRADED',components:{database:database?'OPERATIONAL':'UNAVAILABLE',scanner:scanner?'OPERATIONAL':'UNAVAILABLE'},release:config.RELEASE_COMMIT,note:operational?'All required production dependencies are observed ready.':'One or more required dependencies are unavailable; no positive trust conclusion should be inferred.'})});
 app.get('/ready', async (_req, reply) => {
   const databaseOk = await store.ready(); const databaseRoleSafe = config.NODE_ENV==='production' ? await store.tenantIsolationRoleSafe() : true; const evidenceOk=await kernelStore.ready(); const inventoryOk=await inventoryStore.ready(); const governanceOk=await governanceStore.ready(); let scannerOk = false;
   scannerOk = await scannerReady(config.MALWARE_SCAN_URL,config.MALWARE_SCAN_TOKEN,config.MALWARE_SCAN_TIMEOUT_MS);
