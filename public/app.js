@@ -1,6 +1,6 @@
 'use strict';
 const $=id=>document.getElementById(id);
-const state={snapshot:null,dashboard:null,reports:[],generation:0,controller:null};
+const state={snapshot:null,dashboard:null,reports:[],generation:0,controller:null,reportPending:false};
 const key=()=>($('key').value||'').trim();
 const ALLOWED_VIEWS=new Set(['universe','galaxy','passport','evidence','monitoring','media','reports','timeline']);
 function clearSensitiveState(message='Disconnected. Tenant evidence cleared.'){state.controller?.abort();state.controller=null;state.snapshot=null;state.dashboard=null;state.reports=[];state.generation++;drawUniverse();renderEvidence();renderReports();$('coverage').textContent='UNKNOWN';$('workspaceState').textContent='Connect tenant evidence';status(message,'warning')}
@@ -13,6 +13,8 @@ const fmt=v=>{const d=new Date(v);return Number.isFinite(d.getTime())?d.toLocale
 const count=v=>Array.isArray(v)?v.length:0;
 function status(message,tone=''){const n=$('status');n.textContent=message;n.dataset.tone=tone}
 async function request(path,options={},authenticated=true){
+ if(typeof path!=='string'||!path.startsWith('/')||path.startsWith('//'))throw new Error('INVALID_REQUEST_PATH');
+ const method=String(options.method||'GET').toUpperCase();if(!['GET','POST'].includes(method))throw new Error('INVALID_REQUEST_METHOD');
  const headers={Accept:'application/json',...options.headers};if(authenticated){const secret=key();if(!secret)throw new Error('TENANT_KEY_REQUIRED');headers['x-api-key']=secret}if(options.body)headers['content-type']='application/json';
  const signal=options.signal;const r=await fetch(path,{...options,headers,signal,cache:'no-store',credentials:'same-origin',referrerPolicy:'no-referrer'});
  let body=null;try{body=await r.json()}catch{if(r.ok)throw new Error('INVALID_SERVER_RESPONSE')}
@@ -50,7 +52,7 @@ async function connect(){
  finally{clearTimeout(timer);if(generation===state.generation){$('connect').disabled=false;$('refresh').disabled=false}}
 }
 $('connect').onclick=connect;$('refresh').onclick=connect;$('key').addEventListener('keydown',e=>{if(e.key==='Enter')connect()});$('closeInspector').onclick=()=>{const r=$('entityDetail');clear(r);r.append(el('div','empty','Select the Sun, a star, or an observed phenomenon.'))};
-$('createReport').onclick=async()=>{if(!key()){status('Enter a tenant API key.','error');return}if(!confirm('Create a persisted evidence-derived Constellation report for the current tenant?'))return;$('createReport').disabled=true;try{const r=await request('/v1/customer/reports',{method:'POST',body:JSON.stringify({reportType:'CONSTELLATION_UNIVERSE',asOf:new Date().toISOString()})});status('Evidence-derived report created: '+r.contentHash,'ok');await connect()}catch(e){status(e.message,'error')}finally{$('createReport').disabled=false}};
+$('createReport').onclick=async()=>{if(state.reportPending)return;if(!key()||!validApiKey(key())){status('Enter a valid tenant API key.','error');return}if(!state.snapshot?.organizationId){status('Connect and verify the tenant before creating a report.','error');return}if(!confirm('Create a persisted evidence-derived Constellation report for the current tenant?'))return;state.reportPending=true;$('createReport').disabled=true;try{const r=await request('/v1/customer/reports',{method:'POST',body:JSON.stringify({reportType:'CONSTELLATION_UNIVERSE',asOf:new Date().toISOString()})});status('Evidence-derived report created: '+r.contentHash,'ok');await connect()}catch(e){status(e.message,'error')}finally{state.reportPending=false;$('createReport').disabled=false}};
 $('key').addEventListener('input',()=>{if(state.snapshot)clearSensitiveState('Tenant key changed. Previously loaded evidence was cleared; reconnect to verify the new tenant.')});
 void readiness();
 const VIEW_META={
