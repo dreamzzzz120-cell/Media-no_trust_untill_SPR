@@ -7,5 +7,6 @@ describe('security observability release gate',()=>{
   it('returns a correlation id header',()=>expect(server).toContain("reply.header('x-request-id', req.id)"));
   it('logs authentication failures as structured security events',()=>expect(server).toContain("event:'AUTHENTICATION_FAILURE'"));
   it('logs authorization failures as structured security events',()=>expect(server).toContain("event:'AUTHORIZATION_FAILURE'"));
+  it('correlates JSON error envelopes centrally',()=>expect(server).toContain("body.requestId=req.id"));
   it('does not expose internal errors to clients',()=>expect(server).toContain("error: 'INTERNAL_ERROR', requestId:req.id"));
 });
