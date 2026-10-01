@@ -19,10 +19,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
           node-version: 22.22.0
           cache: npm
@@ -36,6 +36,26 @@ jobs:
       - name: Audit production dependency tree
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Secret scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git grep -nEI '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|ghp_[A-Za-z0-9]{30,}|sk_live_[A-Za-z0-9]{16,}|AKIA[0-9A-Z]{16})' -- . ':!package-lock.json'; then
+            echo "Potential secret detected"
+            exit 1
+          fi
+      - name: Dependency license inventory
+        run: node scripts/license-inventory.mjs > dependency-licenses.json
+      - name: Generate CycloneDX SBOM
+        run: npm sbom --omit=dev --sbom-format cyclonedx > constellation-sbom.json
+      - name: Upload supply-chain evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: constellation-supply-chain
+          path: |
+            constellation-sbom.json
+            dependency-licenses.json
+          if-no-files-found: error
       - name: Run release checks
         run: npm run check
 
@@ -59,8 +79,8 @@ jobs:
     env:
       DATABASE_URL: postgres://media:media@localhost:5432/media
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
           node-version: 22.22.0
           cache: npm
