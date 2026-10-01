@@ -84,3 +84,5 @@ jobs:
         run: npx vitest run tests/tenant-pool-reset-postgres.test.ts
       - name: Run authority/delegation cross-tenant ID attack gate
         run: npx vitest run tests/authority-object-ids-postgres.test.ts
+      - name: Run Wormhole/M2M PostgreSQL attack gate
+        run: npx vitest run tests/wormhole-m2m-postgres-adversarial.test.ts
