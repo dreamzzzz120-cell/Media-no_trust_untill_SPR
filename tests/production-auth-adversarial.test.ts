@@ -28,7 +28,7 @@ async function waitReady(url:string){
   }
   throw new Error('server did not start');
 }
-const publicPath=(path:string)=>path==='/health'||path==='/ready'||path==='/ready/ai'||path==='/'||path==='/v1/integrations/action-confirmations'||path==='/v1/billing/provider-events'||path.startsWith('/public/')||path.startsWith('/passport/')||path.startsWith('/app.')||path.startsWith('/styles.')||path.startsWith('/passport.')||path==='/ai.html'||path==='/ai.js'||path==='/docs'||path.startsWith('/docs/');
+const publicPath=(path:string)=>path==='/health'||path==='/status'||path==='/ready'||path==='/ready/ai'||path==='/'||path==='/v1/integrations/action-confirmations'||path==='/v1/billing/provider-events'||path.startsWith('/public/')||path.startsWith('/passport/')||path.startsWith('/app.')||path.startsWith('/styles.')||path.startsWith('/passport.')||path==='/ai.html'||path==='/ai.js'||path==='/docs'||path.startsWith('/docs/');
 const concrete=(path:string)=>path.replace(/:id\b/g,'00000000-0000-4000-8000-000000000001').replace(/:name\b/g,'step').replace(/:domain\b/g,'AI').replace(/:recordId\b/g,'record-0000000001').replace(/:subjectType\b/g,'SYSTEM').replace(/:subjectId\b/g,'subject-000000001').replace(/:kind\b/g,'IMAGE').replace(/:assetId\b/g,'asset-000000001').replace(/:passportId\b/g,'passport-000000001');
 
 function request(path:string,method:string,key?:string){
