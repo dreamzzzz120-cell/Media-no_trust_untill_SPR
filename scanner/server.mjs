@@ -59,12 +59,7 @@ const send = (res, status, body) => {
 };
 http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/health') {
-    try {
-      const pong = await clamd('zPING\0'); const signatures=await signatureFresh();
-      return send(res, pong === 'PONG' && signatures ? 200 : 503, { ready: pong === 'PONG' && signatures, daemon: pong === 'PONG', signaturesFresh: signatures });
-    } catch {
-      return send(res, 503, { ready: false });
-    }
+    return send(res, 200, { status: 'ok', service: 'malware-adapter' });
   }
   if (req.method === 'GET' && req.url === '/ready') {
     if (!equal(req.headers.authorization, 'Bearer ' + token)) return send(res, 401, { error: 'UNAUTHORIZED' });
