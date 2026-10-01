@@ -8,6 +8,7 @@ const clamdPort = Number(process.env.CLAMD_PORT || 3310);
 const token = process.env.MALWARE_SCAN_TOKEN;
 const maxBytes = Number(process.env.MAX_SCAN_BYTES || 524288000);
 const maxSignatureAgeMs = Number(process.env.MAX_SIGNATURE_AGE_MS || 172800000);
+const constrainedSignatures = process.env.CLAMAV_CONSTRAINED_SIGNATURES !== 'false';
 async function signatureFresh(){try{const version=await clamd('zVERSION\0');const parts=version.split('/');if(parts.length<3)return false;const signatureVersion=Number(parts[1]);const signatureDate=Date.parse(parts.slice(2).join('/'));if(!Number.isInteger(signatureVersion)||signatureVersion<1||!Number.isFinite(signatureDate))return false;const age=Date.now()-signatureDate;return age>=0&&age<=maxSignatureAgeMs}catch{return false}}
 if (!host || !token || token.length < 32 || !Number.isInteger(port) || !Number.isInteger(clamdPort) || !Number.isSafeInteger(maxBytes) || maxBytes < 1) {
   throw new Error('CLAMD_HOST, strong MALWARE_SCAN_TOKEN, and valid ports/limit are required');
@@ -63,7 +64,7 @@ http.createServer(async (req, res) => {
   }
   if (req.method === 'GET' && req.url === '/ready') {
     if (!equal(req.headers.authorization, 'Bearer ' + token)) return send(res, 401, { error: 'UNAUTHORIZED' });
-    try { const pong = await clamd('zPING\0'); const signatures=await signatureFresh(); return send(res, pong === 'PONG' && signatures ? 200 : 503, { ready: pong === 'PONG' && signatures, daemon: pong === 'PONG', signaturesFresh: signatures }); }
+    try { const pong = await clamd('zPING\0'); const signatures=await signatureFresh(); const fullCoverage=!constrainedSignatures; const ready=pong === 'PONG' && signatures && fullCoverage; return send(res, ready ? 200 : 503, { ready, daemon: pong === 'PONG', signaturesFresh: signatures, signatureCoverage: fullCoverage ? 'FULL' : 'CONSTRAINED' }); }
     catch { return send(res, 503, { ready: false }); }
   }
   if (req.method !== 'POST' || req.url !== '/scan') return send(res, 404, { error: 'NOT_FOUND' });
