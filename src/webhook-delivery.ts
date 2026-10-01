@@ -2,7 +2,7 @@ import{createHash,createHmac,randomUUID}from'node:crypto';import postgres from'p
 export type DeliveryStatus='DELIVERED'|'RETRY'|'DEAD';
 export interface DeliveryPolicy{maxAttempts:number;baseDelayMs:number;maxDelayMs:number;timeoutMs:number;maxRequestBytes:number;maxResponseBytes:number;leaseMs:number}
 export const defaultDeliveryPolicy:DeliveryPolicy={maxAttempts:8,baseDelayMs:1000,maxDelayMs:3600000,timeoutMs:10000,maxRequestBytes:1000000,maxResponseBytes:65536,leaseMs:30000};
-export const retryDelay=(attempt:number,p:DeliveryPolicy=defaultDeliveryPolicy)=>Math.min(p.maxDelayMs,p.baseDelayMs*2**Math.max(0,attempt-1));
+export const retryDelay=(attempt:number,p:DeliveryPolicy=defaultDeliveryPolicy,random:()=>number=Math.random)=>{const raw=Math.min(p.maxDelayMs,p.baseDelayMs*2**Math.max(0,attempt-1));const jitter=raw*.2;return Math.min(p.maxDelayMs,Math.max(0,Math.round(raw-jitter+random()*jitter*2)))};
 export const classify=(attempt:number,status:number|null,p:DeliveryPolicy=defaultDeliveryPolicy):DeliveryStatus=>{
  if(status!==null&&status>=200&&status<300)return'DELIVERED';
  if(attempt>=p.maxAttempts)return'DEAD';
