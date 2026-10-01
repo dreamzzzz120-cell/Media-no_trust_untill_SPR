@@ -78,3 +78,5 @@ jobs:
         run: npx vitest run tests/all-tenant-tables-rls.test.ts tests/constellation-control-plane-rls.test.ts
       - name: Run API-key PostgreSQL concurrency attack gate
         run: npx vitest run tests/api-key-postgres-concurrency.test.ts
+      - name: Run cross-tenant object-ID attack gate
+        run: npx vitest run tests/cross-tenant-object-ids-postgres.test.ts
