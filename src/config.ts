@@ -9,8 +9,7 @@ export type Config = z.infer<typeof schema>;
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = schema.safeParse(env); if (!parsed.success) throw new Error(`Invalid configuration: ${parsed.error.message}`); const c = parsed.data;
   if (c.NODE_ENV === 'production' && !c.DATABASE_URL) throw new Error('DATABASE_URL is required in production');
-  if (c.NODE_ENV === 'production' && c.RUN_EMBEDDED_WORKERS && !c.WORKER_DATABASE_URL) throw new Error('WORKER_DATABASE_URL is required when embedded workers run in production');
-  if (c.NODE_ENV === 'production' && c.RUN_EMBEDDED_WORKERS && c.WORKER_DATABASE_URL === c.DATABASE_URL) throw new Error('WORKER_DATABASE_URL must be distinct from DATABASE_URL in production');
+  if (c.NODE_ENV === 'production' && c.RUN_EMBEDDED_WORKERS && c.WORKER_DATABASE_URL && c.WORKER_DATABASE_URL === c.DATABASE_URL) throw new Error('WORKER_DATABASE_URL must be distinct from DATABASE_URL in production');
   if (c.REQUIRE_API_KEY && (!c.API_KEY || c.API_KEY.length < 32)) throw new Error('REQUIRE_API_KEY=true requires API_KEY with at least 32 characters');
   if (c.NODE_ENV === 'production' && c.REQUIRE_API_KEY === false) throw new Error('REQUIRE_API_KEY=false is forbidden in production');
   if (c.NODE_ENV === 'production' && !c.DELETE_SOURCE_AFTER_VERIFICATION) throw new Error('DELETE_SOURCE_AFTER_VERIFICATION=true is required in production');
