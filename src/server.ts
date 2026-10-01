@@ -82,10 +82,10 @@ function requireTenantRead(req:any,reply:any,sensitive=false):boolean{return req
 app.addHook('preHandler',async(req,reply)=>{if(publicPath(req.url)||!req.mediaAuth?.organizationId||!tenantQuotaStore)return;const path=new URL(req.url,'http://localhost').pathname;const cls=classifyRoute(req.method,path);const lim=RATE_LIMITS[cls];const q=await tenantQuotaStore.consume(req.mediaAuth.organizationId,cls,lim.max,lim.windowMs);reply.header('x-ratelimit-remaining',String(q.remaining));if(q.resetAt)reply.header('x-ratelimit-reset',q.resetAt);if(!q.allowed)return reply.code(429).send({error:'TENANT_RATE_LIMITED',rateClass:cls,resetAt:q.resetAt})});
 app.get('/health', async () => ({ status: 'ok', service: 'constellation', version: '1.0.0', release: config.RELEASE_COMMIT }));
 app.get('/ready', async (_req, reply) => {
-  const databaseOk = await store.ready(); const evidenceOk=await kernelStore.ready(); const inventoryOk=await inventoryStore.ready(); const governanceOk=await governanceStore.ready(); let scannerOk = false;
+  const databaseOk = await store.ready(); const databaseRoleSafe = config.NODE_ENV==='production' ? await store.tenantIsolationRoleSafe() : true; const evidenceOk=await kernelStore.ready(); const inventoryOk=await inventoryStore.ready(); const governanceOk=await governanceStore.ready(); let scannerOk = false;
   scannerOk = await scannerReady(config.MALWARE_SCAN_URL,config.MALWARE_SCAN_TOKEN,config.MALWARE_SCAN_TIMEOUT_MS);
-  if (!databaseOk || !evidenceOk || !inventoryOk || !governanceOk || (config.NODE_ENV === 'production' && !scannerOk)) return reply.code(503).send({ status: 'not_ready', database: { ok: databaseOk }, evidence:{ok:evidenceOk}, inventory:{ok:inventoryOk}, governance:{ok:governanceOk}, scanner: { ok: scannerOk } });
-  return { status: 'ready', database: { ok: true }, evidence:{ok:true}, inventory:{ok:true}, governance:{ok:true}, scanner: { ok: scannerOk }, trustEngine: { ok: true } };
+  if (!databaseOk || !databaseRoleSafe || !evidenceOk || !inventoryOk || !governanceOk || (config.NODE_ENV === 'production' && !scannerOk)) return reply.code(503).send({ status: 'not_ready', database: { ok: databaseOk, tenantRoleSafe: databaseRoleSafe }, evidence:{ok:evidenceOk}, inventory:{ok:inventoryOk}, governance:{ok:governanceOk}, scanner: { ok: scannerOk } });
+  return { status: 'ready', database: { ok: true, tenantRoleSafe: true }, evidence:{ok:true}, inventory:{ok:true}, governance:{ok:true}, scanner: { ok: scannerOk }, trustEngine: { ok: true } };
 });
 app.get('/ready/ai', async (_req, reply) => {
  const databaseOk = await aiStore.ready();
