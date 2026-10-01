@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createServer } from 'node:net';
+import net, { createServer } from 'node:net';
 import { readFileSync } from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
 import http from 'node:http';
@@ -40,8 +40,8 @@ function request(path:string,method:string,key?:string){
 }
 function raw(payload:string){
   return new Promise<string>((resolve,reject)=>{
-    const u=new URL(base); const s=createServer;
-    const socket = require('node:net').connect({host:u.hostname,port:Number(u.port)},()=>socket.write(payload));
+    const u=new URL(base);
+    const socket = net.connect({host:u.hostname,port:Number(u.port)},()=>socket.write(payload));
     let out=''; socket.setEncoding('utf8'); socket.on('data',(d:string)=>out+=d); socket.on('end',()=>resolve(out)); socket.on('close',()=>resolve(out)); socket.on('error',reject); socket.setTimeout(3000,()=>socket.destroy());
   });
 }
