@@ -3,7 +3,7 @@ import { Readable } from 'node:stream';
 import { mkdtemp, readdir, lstat, readFile, writeFile, mkdir, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { storeUpload, deleteStoredMedia } from '../src/storage.js';
+import { storeUpload, deleteStoredMedia, promoteStoredMedia } from '../src/storage.js';
 
 const tinyPng = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082','hex');
 
@@ -34,6 +34,13 @@ describe('upload adversarial boundary', () => {
     const broken=new Readable({read(){this.push(tinyPng.subarray(0,10));this.destroy(new Error('INTERRUPTED'));}});
     await expect(storeUpload(broken,'a.png','image/png',root,1024*1024)).rejects.toThrow('INTERRUPTED');
     expect(await readdir(join(root,'quarantine'))).toEqual([]);
+  });
+  it('rejects a symlink masquerading as quarantined media', async () => {
+    const root=await mkdtemp(join(tmpdir(),'constellation-upload-'));
+    await mkdir(join(root,'quarantine'),{recursive:true});
+    const outside=join(root,'outside.png'); await writeFile(outside,tinyPng);
+    const link=join(root,'quarantine','link.png'); await symlink(outside,link);
+    await expect(promoteStoredMedia({id:'x',path:link,sha256:'0'.repeat(64),sizeBytes:tinyPng.length,mime:'image/png',kind:'image',originalFilename:'link.png'},root)).rejects.toThrow('UNSAFE_MEDIA_FILE');
   });
   it('refuses deletion outside the configured storage root', async () => {
     const root=await mkdtemp(join(tmpdir(),'constellation-upload-'));
