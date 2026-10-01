@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createWriteStream, createReadStream } from 'node:fs';
-import { mkdir, stat, unlink, rename } from 'node:fs/promises';
+import { mkdir, stat, lstat, unlink, rename } from 'node:fs/promises';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { join, resolve, basename, relative, isAbsolute } from 'node:path';
@@ -12,7 +12,7 @@ const ALLOWED_VIDEO = new Set(['video/mp4','video/webm','video/quicktime','video
 const ALLOWED_AUDIO = new Set(['audio/mpeg','audio/wav','audio/wave','audio/x-wav','audio/ogg','audio/flac','audio/mp4','audio/aac','audio/webm']);
 const contained=(root:string,target:string)=>{const rel=relative(resolve(root),resolve(target));return rel!==''&&!rel.startsWith('..')&&!isAbsolute(rel)};
 export interface StoredMedia { id: string; path: string; sha256: string; sizeBytes: number; mime: string; kind: MediaKind; originalFilename: string; }
-export async function promoteStoredMedia(media:StoredMedia,root:string):Promise<StoredMedia>{const quarantine=resolve(join(root,'quarantine'));const clean=resolve(join(root,'clean'));const source=resolve(media.path);if(!contained(quarantine,source))throw new Error('MEDIA_NOT_QUARANTINED');await mkdir(clean,{recursive:true,mode:0o700});const target=resolve(join(clean,basename(source)));if(!contained(clean,target))throw new Error('Unsafe storage path');try{await stat(target);throw new Error('CLEAN_MEDIA_ALREADY_EXISTS')}catch(e){if(e instanceof Error&&e.message==='CLEAN_MEDIA_ALREADY_EXISTS')throw e}await rename(source,target);return{...media,path:target}}
+export async function promoteStoredMedia(media:StoredMedia,root:string):Promise<StoredMedia>{const quarantine=resolve(join(root,'quarantine'));const clean=resolve(join(root,'clean'));const source=resolve(media.path);if(!contained(quarantine,source))throw new Error('MEDIA_NOT_QUARANTINED');const sourceInfo=await lstat(source);if(sourceInfo.isSymbolicLink()||!sourceInfo.isFile())throw new Error('UNSAFE_MEDIA_FILE');await mkdir(clean,{recursive:true,mode:0o700});const target=resolve(join(clean,basename(source)));if(!contained(clean,target))throw new Error('Unsafe storage path');try{await stat(target);throw new Error('CLEAN_MEDIA_ALREADY_EXISTS')}catch(e){if(e instanceof Error&&e.message==='CLEAN_MEDIA_ALREADY_EXISTS')throw e}await rename(source,target);return{...media,path:target}}
 export function classifyMime(mime: string): MediaKind | null { if (ALLOWED_IMAGE.has(mime)) return 'image'; if (ALLOWED_VIDEO.has(mime)) return 'video'; if (ALLOWED_AUDIO.has(mime)) return 'audio'; return null; }
 function safeFilename(name: string): string { const base = basename(name).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 180); return base || 'upload'; }
 export async function storeUpload(stream: NodeJS.ReadableStream, originalFilename: string, declaredMime: string, root: string, maxBytes: number): Promise<StoredMedia> {
