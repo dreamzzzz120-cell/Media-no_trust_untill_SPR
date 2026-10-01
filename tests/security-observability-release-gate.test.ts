@@ -8,5 +8,6 @@ describe('security observability release gate',()=>{
   it('logs authentication failures as structured security events',()=>expect(server).toContain("event:'AUTHENTICATION_FAILURE'"));
   it('logs authorization failures as structured security events',()=>expect(server).toContain("event:'AUTHORIZATION_FAILURE'"));
   it('correlates JSON error envelopes centrally',()=>expect(server).toContain("body.requestId=req.id"));
+  it('emits a structured operational event when readiness dependencies fail',()=>expect(server).toContain("type:'READINESS_FAILURE'"));
   it('does not expose internal errors to clients',()=>expect(server).toContain("error: 'INTERNAL_ERROR', requestId:req.id"));
 });
