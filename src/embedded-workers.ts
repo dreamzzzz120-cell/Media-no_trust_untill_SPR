@@ -1,0 +1,7 @@
+import{WebhookDeliveryStore,deliverClaimed,defaultDeliveryPolicy}from'./webhook-delivery.js';import{PrivacyExecutionStore}from'./privacy-execution.js';
+const sleep=(n:number)=>new Promise(r=>setTimeout(r,n));
+export function startEmbeddedWorkers(databaseUrl:string,log:(x:unknown,msg:string)=>void=()=>{}){let stop=false;const webhooks=new WebhookDeliveryStore(databaseUrl),privacy=new PrivacyExecutionStore(databaseUrl);
+ const webhookLoop=(async()=>{while(!stop){try{let work=0;for(const org of await webhooks.tenantIds()){const c=await webhooks.claim(org,25,defaultDeliveryPolicy.leaseMs);if(c.rows.length){work+=c.rows.length;await deliverClaimed(webhooks,c)}}if(!work)await sleep(1000)}catch(e){log({err:e},'embedded webhook worker failure');await sleep(2000)}}})();
+ const privacyLoop=(async()=>{while(!stop){let work=0;try{for(const org of await privacy.tenantIds()){for(const kind of ['EXPORT','DELETION'] as const){const c=await privacy.claim(org,kind,10,30000);for(const row of c.rows){work++;try{if(kind==='EXPORT')await privacy.executeExport(row,c.token);else await privacy.executeDeletion(row,c.token)}catch(e){await privacy.fail(kind,row,c.token,e)}}}}}catch(e){log({err:e},'embedded privacy worker failure')}if(!work)await sleep(1000)}})();
+ return{stop:async()=>{stop=true;await Promise.allSettled([webhookLoop,privacyLoop]);await Promise.allSettled([webhooks.close(),privacy.close()])}};
+}
