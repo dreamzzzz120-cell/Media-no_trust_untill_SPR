@@ -64,6 +64,7 @@ const tenantQuotaStore = appDatabaseUrl ? new TenantQuotaStore(appDatabaseUrl,{s
 const dbOperationsStore = appDatabaseUrl ? new DbOperationsStore(appDatabaseUrl) : null;
 const workerHeartbeatStore = appDatabaseUrl ? new WorkerHeartbeatStore(appDatabaseUrl) : null;
 const embeddedWorkers = config.RUN_EMBEDDED_WORKERS&&workerDatabaseUrl ? startEmbeddedWorkers(workerDatabaseUrl,(x,m)=>app.log.error(x as any,m)) : null;
+app.log.info({apiDbRole:'constellation_api_runtime',workerDbRole:'constellation_worker_runtime',embeddedWorkers:config.RUN_EMBEDDED_WORKERS},'restricted database runtime roles configured');
 const idPattern = /^[A-Za-z0-9_-]{10,40}$/;
 const roles: ApiRole[] = ['viewer','creator','reviewer','moderator','analyst','organization_admin','platform_admin','super_admin'];
 const aiStatuses = ['NONE','AI_ASSISTED','AI_EDITED','AI_GENERATED','AI_SYNTHETIC_PERSON','AI_SYNTHETIC_VOICE','AI_DEEPFAKE','UNKNOWN'] as const;
