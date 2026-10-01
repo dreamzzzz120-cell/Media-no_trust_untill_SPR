@@ -72,3 +72,5 @@ jobs:
         run: npm run migrate
       - name: Run PostgreSQL failure/concurrency gate
         run: npx vitest run tests/postgres-failure-gate.test.ts
+      - name: Run Constellation PostgreSQL RLS adversarial gate
+        run: npx vitest run tests/constellation-postgres-rls-adversarial.test.ts
