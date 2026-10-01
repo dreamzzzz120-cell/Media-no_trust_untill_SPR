@@ -94,3 +94,5 @@ jobs:
         run: npx vitest run tests/evidence-truth-postgres-adversarial.test.ts
       - name: Run search/filter/export tenant-isolation gate
         run: npx vitest run tests/search-export-tenant-isolation.test.ts
+      - name: Run restricted-role restore verification gate
+        run: npx vitest run tests/restore-verifier-postgres.test.ts
