@@ -36,7 +36,7 @@ import { StarDnaStore } from './star-dna.js';
 
 const config = loadConfig();
 const app = Fastify({ logger: { level: config.LOG_LEVEL, redact: ['req.headers.authorization','req.headers.x-api-key','req.headers.x-billing-signature','req.headers.x-media-signature','req.headers.x-enforcement-signature','req.body.token','req.body.secret','headers.authorization','headers.x-api-key'] }, bodyLimit: config.MAX_UPLOAD_BYTES, requestTimeout: config.REQUEST_TIMEOUT_MS, trustProxy: config.TRUST_PROXY });
-const store = createStore(config.DATABASE_URL);
+const store = createStore(config.DATABASE_URL,{max:config.DB_POOL_MAX,idleTimeoutSeconds:config.DB_IDLE_TIMEOUT_SECONDS,connectTimeoutSeconds:config.DB_CONNECT_TIMEOUT_SECONDS,statementTimeoutMs:config.DB_STATEMENT_TIMEOUT_MS,idleTransactionTimeoutMs:config.DB_IDLE_TRANSACTION_TIMEOUT_MS});
 const aiStore = createAiStore(config.DATABASE_URL);
 const constellationStore = createConstellationStore(config.DATABASE_URL);
 const accountabilityStore = createAccountabilityStore(config.DATABASE_URL);
@@ -75,7 +75,7 @@ const tenantReadRoles:ApiRole[]=['viewer','creator','reviewer','moderator','anal
 const sensitiveReadRoles:ApiRole[]=['reviewer','moderator','analyst','organization_admin','platform_admin','super_admin'];
 function requireRole(req:FastifyRequest & {mediaAuth:ApiIdentity|null},reply:any,allowed:ApiRole[]):boolean{const identity=auth(req);if(!allowed.includes(identity.role)){req.log.warn({keyId:identity.keyId,organizationId:identity.organizationId,role:identity.role},'authorization rejected');void reply.code(403).send({error:'FORBIDDEN'});return false}return true}
 function requireTenantRead(req:any,reply:any,sensitive=false):boolean{return requireRole(req,reply,sensitive?sensitiveReadRoles:tenantReadRoles)}
-app.get('/health', async () => ({ status: 'ok', service: 'media-passport', version: '1.0.0' }));
+app.get('/health', async () => ({ status: 'ok', service: 'constellation', version: '1.0.0', release: config.RELEASE_COMMIT }));
 app.get('/ready', async (_req, reply) => {
   const databaseOk = await store.ready(); const evidenceOk=await kernelStore.ready(); const inventoryOk=await inventoryStore.ready(); const governanceOk=await governanceStore.ready(); let scannerOk = false;
   scannerOk = await scannerReady(config.MALWARE_SCAN_URL,config.MALWARE_SCAN_TOKEN,config.MALWARE_SCAN_TIMEOUT_MS);
