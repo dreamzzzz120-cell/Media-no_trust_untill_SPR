@@ -1,0 +1,6 @@
+import postgres from'postgres';
+export class WorkerHeartbeatStore{private sql;constructor(url:string){this.sql=postgres(url,{max:1,prepare:false,connection:{statement_timeout:5000}})}
+ async beat(workerName:string,mode:'EMBEDDED'|'STANDALONE',instanceId:string,lastError:string|null=null){await this.sql`INSERT INTO worker_heartbeats(worker_name,mode,instance_id,last_heartbeat_at,last_error,updated_at) VALUES(${workerName},${mode},${instanceId},now(),${lastError},now()) ON CONFLICT(worker_name) DO UPDATE SET mode=excluded.mode,instance_id=excluded.instance_id,last_heartbeat_at=excluded.last_heartbeat_at,last_error=excluded.last_error,updated_at=now()`}
+ async status(maxAgeMs=15000){const rows=await this.sql<any[]>`SELECT worker_name,mode,instance_id,last_heartbeat_at,last_error,(clock_timestamp()-last_heartbeat_at) < ${maxAgeMs}*interval '1 millisecond' AS fresh FROM worker_heartbeats ORDER BY worker_name`;return rows.map(r=>({workerName:String(r.worker_name),mode:String(r.mode),instanceId:String(r.instance_id),lastHeartbeatAt:new Date(r.last_heartbeat_at).toISOString(),lastError:r.last_error?String(r.last_error):null,fresh:r.fresh===true}))}
+ async close(){await this.sql.end({timeout:5})}
+}
