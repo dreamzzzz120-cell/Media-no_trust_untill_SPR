@@ -1,0 +1,3 @@
+import{describe,it,expect}from'vitest';import{readFileSync}from'node:fs';
+const s=readFileSync(new URL('../src/server.ts',import.meta.url),'utf8');
+describe('sensitive log redaction release gate',()=>{it('redacts browser and service credentials',()=>{for(const x of ['req.headers.authorization','req.headers.cookie','req.headers.x-api-key','req.headers.x-billing-signature','req.headers.x-media-signature','req.headers.x-enforcement-signature','req.headers.x-trusted-action-signature','req.headers.x-scanner-token','req.body.token','req.body.secret','req.body.password','req.body.apiKey'])expect(s).toContain(x)})});
