@@ -1,4 +1,5 @@
 import postgres from 'postgres';
+import { withTenant } from './db-tenant.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { EvidenceState, ExternalOutcome } from './reconciliation.js';
 import { reconcileAction } from './reconciliation.js';
@@ -73,13 +74,13 @@ class PgAiStore implements AiStore {
  constructor(private sql: postgres.Sql) {}
  async ready() { try { await this.sql`SELECT 1 FROM ai_identities LIMIT 0`; await this.sql`SELECT 1 FROM flight_records LIMIT 0`; await this.sql`SELECT 1 FROM evidence_ledger LIMIT 0`; await this.sql`SELECT 1 FROM ai_alerts LIMIT 0`; return true; } catch { return false; } }
  async register(org: string, input: Pick<AiSystem, 'name' | 'purpose' | 'owner' | 'provider' | 'model'>) {
-  const rows = await this.sql<SystemRow[]>`INSERT INTO ai_identities(id, organization_id, name, purpose, owner, provider, model) VALUES (${randomUUID()}, ${org}, ${input.name}, ${input.purpose}, ${input.owner}, ${input.provider}, ${input.model}) RETURNING *`;
+  const rows = await withTenant(this.sql,org,tx=>tx<SystemRow[]>`INSERT INTO ai_identities(id, organization_id, name, purpose, owner, provider, model) VALUES (${randomUUID()}, ${org}, ${input.name}, ${input.purpose}, ${input.owner}, ${input.provider}, ${input.model}) RETURNING *`);
   if (!rows[0]) throw new Error('AI_REGISTRATION_FAILED'); return systemFromRow(rows[0]);
  }
- async get(org: string, id: string) { if (!isUuid(id)) return null; const rows = await this.sql<SystemRow[]>`SELECT * FROM ai_identities WHERE organization_id=${org} AND id=${id}`; return rows[0] ? systemFromRow(rows[0]) : null; }
+ async get(org: string, id: string) { if (!isUuid(id)) return null; const rows = await withTenant(this.sql,org,tx=>tx<SystemRow[]>`SELECT * FROM ai_identities WHERE organization_id=${org} AND id=${id}`); return rows[0] ? systemFromRow(rows[0]) : null; }
  async append(org: string, aiId: string, input: EventInput) {
   if (!isUuid(aiId)) return null;
-  return this.sql.begin(async tx => {
+  return withTenant(this.sql,org,async tx => {
    const systems = await tx`SELECT id FROM ai_identities WHERE organization_id=${org} AND id=${aiId} FOR UPDATE`; if (!systems.length) return null;
    const prior = await tx<{ event_hash: string }[]>`SELECT event_hash FROM flight_records WHERE organization_id=${org} AND ai_identity_id=${aiId} ORDER BY sequence DESC LIMIT 1`;
    const event = makeEvent(aiId, input, prior[0]?.event_hash ?? null);
@@ -98,10 +99,10 @@ class PgAiStore implements AiStore {
    return result;
   });
  }
- async timeline(org: string, aiId: string, afterSequence = 0, limit = 1000) { const rows = await this.sql<EventRow[]>`SELECT * FROM flight_records WHERE organization_id=${org} AND ai_identity_id=${aiId} AND sequence > ${afterSequence} ORDER BY sequence ASC LIMIT ${limit}`; return rows.map(eventFromRow); }
- async alerts(org: string, aiId: string) { const rows = await this.sql<AlertRow[]>`SELECT * FROM ai_alerts WHERE organization_id=${org} AND ai_identity_id=${aiId} ORDER BY created_at DESC LIMIT 100`; return rows.map(alertFromRow); }
+ async timeline(org: string, aiId: string, afterSequence = 0, limit = 1000) { const rows = await withTenant(this.sql,org,tx=>tx<EventRow[]>`SELECT * FROM flight_records WHERE organization_id=${org} AND ai_identity_id=${aiId} AND sequence > ${afterSequence} ORDER BY sequence ASC LIMIT ${limit}`); return rows.map(eventFromRow); }
+ async alerts(org: string, aiId: string) { const rows = await withTenant(this.sql,org,tx=>tx<AlertRow[]>`SELECT * FROM ai_alerts WHERE organization_id=${org} AND ai_identity_id=${aiId} ORDER BY created_at DESC LIMIT 100`); return rows.map(alertFromRow); }
  async integrity(org: string, aiId: string) {
-  const rows = await this.sql<(EventRow & { ledger_hash: string | null })[]>`SELECT f.*, l.cryptographic_hash AS ledger_hash FROM flight_records f LEFT JOIN evidence_ledger l ON l.flight_record_id=f.id AND l.organization_id=f.organization_id WHERE f.organization_id=${org} AND f.ai_identity_id=${aiId} ORDER BY f.sequence ASC LIMIT 10001`;
+  const rows = await withTenant(this.sql,org,tx=>tx<(EventRow & { ledger_hash: string | null })[]>`SELECT f.*, l.cryptographic_hash AS ledger_hash FROM flight_records f LEFT JOIN evidence_ledger l ON l.flight_record_id=f.id AND l.organization_id=f.organization_id WHERE f.organization_id=${org} AND f.ai_identity_id=${aiId} ORDER BY f.sequence ASC LIMIT 10001`);
   const incomplete = rows.length > 10000; const checked = rows.slice(0, 10000);
   const result = checkChain(checked.map(eventFromRow), new Map(checked.map(r => [r.id, r.ledger_hash ?? 'MISSING'])));
   return incomplete && result.state === 'VALID_INTERNAL_CHAIN' ? { ...result, state:'INCOMPLETE' as const } : result;
