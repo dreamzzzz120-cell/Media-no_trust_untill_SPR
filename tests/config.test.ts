@@ -24,6 +24,14 @@ describe('configuration', () => {
   it('rejects production without malware scanning', () => {
     expect(() => loadConfig({ ...production, MALWARE_SCAN_URL: undefined })).toThrow();
   });
+  it('keeps API live but worker readiness degraded when a separate worker credential is absent', () => {
+    const c = loadConfig({ ...production, RUN_EMBEDDED_WORKERS: 'true' });
+    expect(c.RUN_EMBEDDED_WORKERS).toBe(true);
+    expect(c.WORKER_DATABASE_URL).toBeUndefined();
+  });
+  it('rejects reusing the API database credential for embedded workers', () => {
+    expect(() => loadConfig({ ...production, RUN_EMBEDDED_WORKERS: 'true', WORKER_DATABASE_URL: production.DATABASE_URL })).toThrow('WORKER_DATABASE_URL must be distinct');
+  });
   it('accepts a complete production configuration', () => {
     const c = loadConfig(production);
     expect(c.REQUIRE_API_KEY).toBe(true);
