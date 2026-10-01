@@ -42,7 +42,7 @@ function raw(payload:string){
   return new Promise<string>((resolve,reject)=>{
     const u=new URL(base);
     const socket = net.connect({host:u.hostname,port:Number(u.port)},()=>socket.write(payload));
-    let out=''; socket.setEncoding('utf8'); socket.on('data',(d:string)=>out+=d); socket.on('end',()=>resolve(out)); socket.on('close',()=>resolve(out)); socket.on('error',reject); socket.setTimeout(3000,()=>socket.destroy());
+    let out=''; socket.setEncoding('utf8'); socket.on('data',(d:string)=>out+=d); socket.on('end',()=>resolve(out)); socket.on('close',()=>resolve(out)); socket.on('error',(e:any)=>{if(e?.code==='ECONNRESET')resolve(out);else reject(e)}); socket.setTimeout(3000,()=>socket.destroy());
   });
 }
 
