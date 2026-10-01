@@ -32,5 +32,18 @@ EOF
 # first, then start clamd with the bounded configuration above.
 freshclam --stdout || true
 
+# Railway's current scanner service is capped at ~1 GiB while the full
+# main+daily ClamAV database exceeds that limit during clamd startup.
+# In constrained mode we retain the current daily signatures and remove the
+# much larger main/bytecode databases before loading clamd. This is a real,
+# narrower malware detector; it must never be represented as full-signature
+# ClamAV coverage. Set CLAMAV_CONSTRAINED_SIGNATURES=false only on a service
+# with enough memory for the full database.
+if [ "${CLAMAV_CONSTRAINED_SIGNATURES:-true}" = "true" ]; then
+  rm -f /var/lib/clamav/main.cvd /var/lib/clamav/main.cld
+  rm -f /var/lib/clamav/bytecode.cvd /var/lib/clamav/bytecode.cld
+  echo "ClamAV constrained-signature mode: daily database only"
+fi
+
 # Keep clamd as PID 1 so Railway sees the real daemon lifecycle.
 exec clamd --config-file="$CONF"
