@@ -33,6 +33,8 @@ import { PrivacyExecutionStore } from './privacy-execution.js';
 import { CommerceStore, verifyProviderSignature } from './commerce.js';
 import { canGrant, safeWebhookBodySize } from './security-gate.js';
 import { StarDnaStore } from './star-dna.js';
+import { classifyRoute, RATE_LIMITS } from './operational-hardening.js';
+import { TenantQuotaStore } from './tenant-quota.js';
 
 const config = loadConfig();
 const app = Fastify({ logger: { level: config.LOG_LEVEL, redact: ['req.headers.authorization','req.headers.x-api-key','req.headers.x-billing-signature','req.headers.x-media-signature','req.headers.x-enforcement-signature','req.body.token','req.body.secret','headers.authorization','headers.x-api-key'] }, bodyLimit: config.MAX_UPLOAD_BYTES, requestTimeout: config.REQUEST_TIMEOUT_MS, trustProxy: config.TRUST_PROXY });
@@ -49,11 +51,13 @@ const customerProjectionStore = config.DATABASE_URL ? new CustomerProjectionStor
 const privacyExecutionStore = config.DATABASE_URL ? new PrivacyExecutionStore(config.DATABASE_URL) : null;
 const commerceStore = config.DATABASE_URL ? new CommerceStore(config.DATABASE_URL) : null;
 const starDnaStore = config.DATABASE_URL ? new StarDnaStore(config.DATABASE_URL) : null;
+const tenantQuotaStore = config.DATABASE_URL ? new TenantQuotaStore(config.DATABASE_URL,{statementTimeoutMs:Math.min(config.DB_STATEMENT_TIMEOUT_MS,5000)}) : null;
 const idPattern = /^[A-Za-z0-9_-]{10,40}$/;
 const roles: ApiRole[] = ['viewer','creator','reviewer','moderator','analyst','organization_admin','platform_admin','super_admin'];
 const aiStatuses = ['NONE','AI_ASSISTED','AI_EDITED','AI_GENERATED','AI_SYNTHETIC_PERSON','AI_SYNTHETIC_VOICE','AI_DEEPFAKE','UNKNOWN'] as const;
 await app.register(helmet, { global: true });
 await app.register(rateLimit, { max: config.RATE_LIMIT_MAX, timeWindow: config.RATE_LIMIT_WINDOW_MS });
+app.addHook('onRoute',(route:any)=>{const cls=classifyRoute(String(route.method),String(route.url));const limit=RATE_LIMITS[cls];route.config={...(route.config??{}),rateLimit:{max:limit.max,timeWindow:limit.windowMs}}});
 await app.register(multipart, { limits: { fileSize: config.MAX_UPLOAD_BYTES, files: 1, fields: 8 } });
 await app.register(fastifyStatic, { root: resolve('public'), prefix: '/' });
 await app.register(swagger, { openapi: { info: { title: 'Media Passport API', version: '1.0.0' }, servers: [{ url: '/' }], tags: [{ name: 'media' }, { name: 'passport' }, { name: 'trust' }, { name: 'cases' }, { name: 'admin' }] } });
@@ -75,6 +79,7 @@ const tenantReadRoles:ApiRole[]=['viewer','creator','reviewer','moderator','anal
 const sensitiveReadRoles:ApiRole[]=['reviewer','moderator','analyst','organization_admin','platform_admin','super_admin'];
 function requireRole(req:FastifyRequest & {mediaAuth:ApiIdentity|null},reply:any,allowed:ApiRole[]):boolean{const identity=auth(req);if(!allowed.includes(identity.role)){req.log.warn({keyId:identity.keyId,organizationId:identity.organizationId,role:identity.role},'authorization rejected');void reply.code(403).send({error:'FORBIDDEN'});return false}return true}
 function requireTenantRead(req:any,reply:any,sensitive=false):boolean{return requireRole(req,reply,sensitive?sensitiveReadRoles:tenantReadRoles)}
+app.addHook('preHandler',async(req,reply)=>{if(publicPath(req.url)||!req.mediaAuth?.organizationId||!tenantQuotaStore)return;const path=new URL(req.url,'http://localhost').pathname;const cls=classifyRoute(req.method,path);const lim=RATE_LIMITS[cls];const q=await tenantQuotaStore.consume(req.mediaAuth.organizationId,cls,lim.max,lim.windowMs);reply.header('x-ratelimit-remaining',String(q.remaining));if(q.resetAt)reply.header('x-ratelimit-reset',q.resetAt);if(!q.allowed)return reply.code(429).send({error:'TENANT_RATE_LIMITED',rateClass:cls,resetAt:q.resetAt})});
 app.get('/health', async () => ({ status: 'ok', service: 'constellation', version: '1.0.0', release: config.RELEASE_COMMIT }));
 app.get('/ready', async (_req, reply) => {
   const databaseOk = await store.ready(); const evidenceOk=await kernelStore.ready(); const inventoryOk=await inventoryStore.ready(); const governanceOk=await governanceStore.ready(); let scannerOk = false;
