@@ -74,3 +74,7 @@ jobs:
         run: npx vitest run tests/postgres-failure-gate.test.ts
       - name: Run Constellation PostgreSQL RLS adversarial gate
         run: npx vitest run tests/constellation-postgres-rls-adversarial.test.ts
+      - name: Run tenant-table RLS coverage gate
+        run: npx vitest run tests/all-tenant-tables-rls.test.ts tests/constellation-control-plane-rls.test.ts
+      - name: Run API-key PostgreSQL concurrency attack gate
+        run: npx vitest run tests/api-key-postgres-concurrency.test.ts
