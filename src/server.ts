@@ -232,7 +232,7 @@ app.post('/v1/integrations/action-confirmations', async (req, reply) => {
 });
 const verifyUpload = async (req: FastifyRequest, reply: FastifyReply) => {
   if (!requireRole(req, reply, ['creator','analyst','organization_admin','platform_admin','super_admin'])) return;
-  const identity = auth(req); if (req.url === '/v1/publisher/verify' && !identity.organizationId) return reply.code(403).send({ error: 'PUBLISHER_KEY_REQUIRED' }); const declaredHeader = String(req.headers['x-declared-ai-use'] ?? 'UNKNOWN').toUpperCase(); const declaredAiUse = (aiStatuses as readonly string[]).includes(declaredHeader) ? declaredHeader as typeof aiStatuses[number] : 'UNKNOWN';
+  const identity = auth(req); if (!identity.organizationId) return reply.code(403).send({ error: req.url === '/v1/publisher/verify' ? 'PUBLISHER_KEY_REQUIRED' : 'TENANT_KEY_REQUIRED' }); const declaredHeader = String(req.headers['x-declared-ai-use'] ?? 'UNKNOWN').toUpperCase(); const declaredAiUse = (aiStatuses as readonly string[]).includes(declaredHeader) ? declaredHeader as typeof aiStatuses[number] : 'UNKNOWN';
   const creatorHeader = req.headers['x-creator-id']; const creatorId = typeof creatorHeader === 'string' && idPattern.test(creatorHeader) ? creatorHeader : undefined;
   const scannerOk=await scannerReady(config.MALWARE_SCAN_URL,config.MALWARE_SCAN_TOKEN,config.MALWARE_SCAN_TIMEOUT_MS); if(!scannerOk){req.log.warn({state:'BLOCKED_UNVERIFIED'},'upload rejected because malware scanner is unavailable');return reply.code(503).send({error:'BLOCKED_UNVERIFIED',state:'BLOCKED_UNVERIFIED',reason:'MALWARE_SCANNER_UNAVAILABLE'});}
   const part = await req.file({ limits: { fileSize: config.MAX_UPLOAD_BYTES } }); if (!part) return reply.code(400).send({ error: 'FILE_REQUIRED' });
@@ -255,7 +255,7 @@ const verifyUpload = async (req: FastifyRequest, reply: FastifyReply) => {
 };
 app.post('/v1/media/verify', verifyUpload);
 app.post('/v1/publisher/verify', verifyUpload);
-async function getRecord(id: string, reply: any, identity?: ApiIdentity | null) { if (!idPattern.test(id)) { void reply.code(400).send({ error: 'INVALID_ID' }); return null; } const record = await store.get(id, identity?.organizationId ?? undefined); if (!record || (identity && !canReadTenantRecord(identity, record))) { void reply.code(404).send({ error: 'NOT_FOUND' }); return null; } return record; }
+async function getRecord(id: string, reply: any, identity?: ApiIdentity | null) { if (!idPattern.test(id)) { void reply.code(400).send({ error: 'INVALID_ID' }); return null; } if(!identity?.organizationId){void reply.code(403).send({error:'TENANT_KEY_REQUIRED'});return null;} const record = await store.get(id, identity.organizationId); if (!record || !canReadTenantRecord(identity, record)) { void reply.code(404).send({ error: 'NOT_FOUND' }); return null; } return record; }
 app.get('/v1/media/:id', async (req, reply) => { const record = await getRecord((req.params as { id: string }).id, reply, req.mediaAuth); if (!record) return; return record; });
 app.get('/v1/media/:id/evidence', async (req, reply) => { const record = await getRecord((req.params as { id: string }).id, reply, req.mediaAuth); if (!record) return; return { passportId: record.asset.id, evidence: record.observations, evidenceQuality: record.trustVector.evidenceQuality }; });
 app.get('/v1/media/:id/provenance', async (req, reply) => { const record = await getRecord((req.params as { id: string }).id, reply, req.mediaAuth); if (!record) return; return { passportId: record.asset.id, provenance: record.provenance }; });
