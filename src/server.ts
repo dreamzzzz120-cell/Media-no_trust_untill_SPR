@@ -67,11 +67,12 @@ app.decorateRequest('mediaAuth', null);
 app.addHook('onRequest', async (req, reply) => {
   if (publicPath(req.url) || !config.REQUIRE_API_KEY) return;
   const supplied = req.headers['x-api-key'];
-  if (typeof supplied !== 'string') return reply.code(401).send({ error: 'UNAUTHORIZED' });
+  const rejectAuth=async()=>{if(tenantQuotaStore){const key='auth:'+createHash('sha256').update(req.ip).digest('hex');const lim=RATE_LIMITS.AUTH_FAILURE;const q=await tenantQuotaStore.consume(key,'AUTH_FAILURE',lim.max,lim.windowMs);if(!q.allowed)return reply.code(429).send({error:'AUTH_RATE_LIMITED',resetAt:q.resetAt})}return reply.code(401).send({error:'UNAUTHORIZED'})};
+  if (typeof supplied !== 'string') return rejectAuth();
   const expected = config.API_KEY;
   if (expected) { const suppliedBuffer = Buffer.from(supplied); const expectedBuffer = Buffer.from(expected); if (suppliedBuffer.length === expectedBuffer.length && timingSafeEqual(suppliedBuffer, expectedBuffer)) { req.mediaAuth = { keyId: 'bootstrap', organizationId: null, role: config.BOOTSTRAP_API_ROLE }; return; } }
   const identity = await store.authenticateApiKey(supplied);
-  if (!identity) { req.log.warn({ ip:req.ip, route:req.routeOptions?.url ?? new URL(req.url,'http://localhost').pathname }, 'authentication rejected'); return reply.code(401).send({ error: 'UNAUTHORIZED' }); }
+  if (!identity) { req.log.warn({ ip:req.ip, route:req.routeOptions?.url ?? new URL(req.url,'http://localhost').pathname }, 'authentication rejected'); return rejectAuth(); }
   req.mediaAuth = identity;
 });
 function auth(req: { mediaAuth: ApiIdentity | null }): ApiIdentity { if (!req.mediaAuth) throw new Error('UNAUTHORIZED'); return req.mediaAuth; }
