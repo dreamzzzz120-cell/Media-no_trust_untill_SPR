@@ -1,0 +1,51 @@
+name: Build Provenance
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  attest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 22.22.0
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --fund=false
+
+      - name: Release gate
+        run: npm run check
+
+      - name: Build release artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -czf constellation-build.tgz dist package.json package-lock.json db public
+          sha256sum constellation-build.tgz > constellation-build.tgz.sha256
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+        with:
+          subject-path: constellation-build.tgz
+
+      - name: Upload attested build
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: constellation-attested-build
+          path: |
+            constellation-build.tgz
+            constellation-build.tgz.sha256
+          if-no-files-found: error
