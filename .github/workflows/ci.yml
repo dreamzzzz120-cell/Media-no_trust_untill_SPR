@@ -90,3 +90,5 @@ jobs:
         run: npx vitest run tests/wormhole-m2m-postgres-adversarial.test.ts
       - name: Run evidence truth PostgreSQL attack gate
         run: npx vitest run tests/evidence-truth-postgres-adversarial.test.ts
+      - name: Run search/filter/export tenant-isolation gate
+        run: npx vitest run tests/search-export-tenant-isolation.test.ts
