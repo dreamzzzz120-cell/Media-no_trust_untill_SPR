@@ -1,6 +1,13 @@
 import{createHash,createHmac,timingSafeEqual,randomUUID}from'node:crypto';import postgres from'postgres';
 const sha=(x:string)=>createHash('sha256').update(x).digest('hex');
 export type BillingState='UNKNOWN'|'PENDING'|'ACTIVE'|'PAST_DUE'|'CANCELED'|'FAILED';
+export type EntitlementDecision='ENTITLED'|'NOT_ENTITLED'|'UNKNOWN';
+export function evaluateEntitlement(b:{status?:BillingState|null;subscription_status?:BillingState|null;last_evidence_hash?:string|null}):EntitlementDecision{
+ if(b.status==='ACTIVE'&&b.subscription_status==='ACTIVE'&&!!b.last_evidence_hash&&/^[a-f0-9]{64}$/.test(b.last_evidence_hash))return 'ENTITLED';
+ if(['CANCELED','FAILED'].includes(String(b.status))||['CANCELED','FAILED'].includes(String(b.subscription_status)))return 'NOT_ENTITLED';
+ return 'UNKNOWN';
+}
+export function mayExecuteAuthorizedFeature(authorized:boolean,entitlement:EntitlementDecision){return authorized&&entitlement==='ENTITLED'}
 export function verifyProviderSignature(secret:string,raw:string,header:string|undefined){if(!header||!/^[a-f0-9]{64}$/.test(header))return false;const expected=createHmac('sha256',secret).update(raw).digest();return timingSafeEqual(expected,Buffer.from(header,'hex'))}
 export class CommerceStore{private sql;constructor(url:string){this.sql=postgres(url,{prepare:false})}async close(){await this.sql.end({timeout:5})}
  async billing(org:string){const r=await this.sql`SELECT provider,external_customer_id,status,subscription_status,last_external_event_id,last_evidence_hash,observed_at,updated_at FROM billing_accounts WHERE organization_id=${org}`;return r[0]??{provider:null,external_customer_id:null,status:'UNKNOWN',subscription_status:'UNKNOWN',last_external_event_id:null,last_evidence_hash:null,observed_at:null}}

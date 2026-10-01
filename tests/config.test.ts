@@ -7,7 +7,8 @@ const production = {
   API_KEY: 'a'.repeat(40),
   DATABASE_URL: 'postgres://user:pass@example.com/db',
   MALWARE_SCAN_URL: 'https://scanner.example.test/scan',
-  MALWARE_SCAN_TOKEN: 't'.repeat(20),
+  MALWARE_SCAN_TOKEN: 't'.repeat(40),
+  MAX_UPLOAD_BYTES: '268435456',
 };
 
 describe('configuration', () => {

@@ -13,7 +13,7 @@ describe('storage boundary', () => {
   });
   it('rejects unsupported content', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'spr-media-'));
-    await expect(storeUpload(Readable.from(['not an image']), 'x.txt', 'text/plain', dir, 1024 * 1024)).rejects.toThrow('UNSUPPORTED_MEDIA_TYPE');
+    await expect(storeUpload(Readable.from(['not an image']), 'x.txt', 'text/plain', dir, 1024 * 1024)).rejects.toThrow('MEDIA_SIGNATURE_UNRECOGNIZED');
     await rm(dir, { recursive: true, force: true });
   });
 });

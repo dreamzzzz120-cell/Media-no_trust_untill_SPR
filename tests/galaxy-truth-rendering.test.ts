@@ -7,7 +7,7 @@ describe('Galaxy truth-rendering release gate',()=>{
  it('never converts missing stars into a positive state',()=>{expect(app).toContain('UNKNOWN is not treated as safe or empty');expect(app).toContain("coverage?.state||'UNKNOWN'");expect(model).toContain("No persisted constellation evidence existed by this timestamp.")});
  it('keeps relationship wording neutral across evidence states',()=>{expect(html).toContain('persisted relationship records');expect(html).toContain('persisted relationship');expect(html).not.toContain('observed paths')});
  it('requires established evidence for wormholes and major changes',()=>{expect(model).toContain("WORMHOLE_REQUIRES_OBSERVED_EVIDENCE");expect(model).toContain("CHANGE_REQUIRES_OBSERVED_EVIDENCE")});
- it('never renders black holes as verified positives',()=>{expect(model).toContain("VISIBILITY_LOSS_CANNOT_BE_VERIFIED_POSITIVE")});
+ it('never renders black holes as verified positives',()=>{expect(model).toContain("VISIBILITY_GAP_REQUIRES_LIMITED_EVIDENCE_STATE")});
  it('draws graph objects only from returned entity relationship and event arrays',()=>{expect(app).toContain('p.entities');expect(app).toContain('p.relationships');expect(app).toContain('p.events');expect(app).toContain("if(!a||!b)continue")});
  it('does not invent tenant identity',()=>{expect(app).toContain('The Sun is the authenticated tenant context. Constellation does not invent an organization name')});
 });
