@@ -14,7 +14,7 @@ const sha=(x:string)=>createHash('sha256').update(x).digest('hex');
 export class WebhookDeliveryStore{
  private sql;constructor(url:string){this.sql=postgres(url,{prepare:false})}
  async close(){await this.sql.end({timeout:5})}
- async claim(limit:number,leaseMs:number){const token=randomUUID();const rows=await this.sql.begin(async tx=>tx`WITH due AS (SELECT id FROM webhook_outbox WHERE status IN('PENDING','FAILED') AND next_attempt_at<=now() AND (lease_expires_at IS NULL OR lease_expires_at<now()) ORDER BY next_attempt_at,id FOR UPDATE SKIP LOCKED LIMIT ${limit}) UPDATE webhook_outbox o SET lease_token=${token},lease_expires_at=now()+${leaseMs}*interval '1 millisecond' FROM due WHERE o.id=due.id RETURNING o.*`);return{token,rows}}
+ async claim(limit:number,leaseMs:number){const token=randomUUID();const rows=await this.sql`SELECT * FROM claim_webhook_jobs(${token}::uuid,${limit},${leaseMs})`;return{token,rows}}
  async signingKey(org:string){return withTenant(this.sql,org,async tx=>{const r=await tx`SELECT id,secret FROM webhook_signing_keys WHERE organization_id=${org} AND status='ACTIVE' AND not_before<=now() AND (not_after IS NULL OR not_after>now()) LIMIT 1`;return r[0] as {id:string;secret:string}|undefined})}
  async subscription(id:string,org:string){return withTenant(this.sql,org,async tx=>{const r=await tx`SELECT id,url FROM webhook_subscriptions WHERE id=${id} AND organization_id=${org} AND active=true LIMIT 1`;return r[0] as {id:string;url:string}|undefined})}
  async finish(input:{row:any;token:string;deliveryId:string;keyId:string;requestHash:string;status:number|null;error:string|null;startedAt:string;completedAt:string;policy:DeliveryPolicy}){
