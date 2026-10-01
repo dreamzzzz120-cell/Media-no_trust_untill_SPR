@@ -96,3 +96,5 @@ jobs:
         run: npx vitest run tests/search-export-tenant-isolation.test.ts
       - name: Run restricted-role restore verification gate
         run: npx vitest run tests/restore-verifier-postgres.test.ts
+      - name: Run runtime DB role and worker claim gate
+        run: npx vitest run tests/runtime-db-roles-postgres.test.ts
