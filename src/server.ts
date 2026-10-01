@@ -63,6 +63,20 @@ app.decorateRequest('mediaAuth', null);
 app.addHook('onRequest', async (req, reply) => {
   reply.header('x-request-id', req.id);
 });
+app.addHook('onSend', async (req, reply, payload) => {
+  if (reply.statusCode < 400 || typeof payload !== 'string') return payload;
+  const contentType=String(reply.getHeader('content-type') ?? '');
+  if (!contentType.includes('application/json')) return payload;
+  try {
+    const body=JSON.parse(payload) as Record<string,unknown>;
+    if (!body || Array.isArray(body) || typeof body !== 'object') return payload;
+    if (typeof body.error !== 'string') return payload;
+    if (body.requestId === undefined) body.requestId=req.id;
+    return JSON.stringify(body);
+  } catch {
+    return payload;
+  }
+});
 app.addHook('onRequest', async (req, reply) => {
   if (publicPath(req.url) || !config.REQUIRE_API_KEY) return;
   const supplied = req.headers['x-api-key'];
