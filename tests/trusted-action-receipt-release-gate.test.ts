@@ -7,6 +7,7 @@ describe('trusted action receipt release gate',()=>{
  it('rejects unsigned extension fields',()=>expect(server).toContain('confirmationSchema = z.object'));
  it('strictly parses trusted confirmation payloads',()=>expect(server).toContain('externalEventId: z.string().regex(/^[A-Za-z0-9_.:-]{1,150}$/) }).strict()'));
  it('rejects timestamp reversal and excessive future clock skew',()=>{expect(ai).toContain("occurred<claimed");expect(ai).toContain("occurred>now+300000");expect(ai).toContain("INVALID_CONFIRMATION_TIME")});
+ it('binds confirmations only to declared action requests',()=>{expect(ai).toContain("sourceType === 'DECLARATION' && e.eventType === 'ACTION_REQUESTED'");expect(ai).toContain("source_type='DECLARATION' AND event_type='ACTION_REQUESTED'")});
  it('deduplicates provider receipts per tenant and source',()=>expect(migration).toContain('CREATE UNIQUE INDEX flight_records_external_idx ON flight_records(organization_id, source, external_event_id)'));
  it('keeps flight receipts append only',()=>{expect(migration).toContain('flight_records_immutable');expect(migration).toContain('BEFORE UPDATE OR DELETE ON flight_records')});
 });
