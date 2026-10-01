@@ -35,7 +35,7 @@ import { canGrant, safeWebhookBodySize } from './security-gate.js';
 import { StarDnaStore } from './star-dna.js';
 
 const config = loadConfig();
-const runtimeDatabaseUrl = config.APP_DATABASE_URL ?? runtimeDatabaseUrl;
+const runtimeDatabaseUrl = config.APP_DATABASE_URL ?? config.DATABASE_URL;
 const app = Fastify({ logger: { level: config.LOG_LEVEL, redact: ['req.headers.authorization','req.headers.x-api-key','req.headers.x-billing-signature','req.headers.x-media-signature','req.headers.x-enforcement-signature','req.body.token','req.body.secret','headers.authorization','headers.x-api-key'] }, bodyLimit: config.MAX_UPLOAD_BYTES, requestTimeout: config.REQUEST_TIMEOUT_MS, trustProxy: config.TRUST_PROXY });
 const store = createStore(runtimeDatabaseUrl);
 const aiStore = createAiStore(runtimeDatabaseUrl);
