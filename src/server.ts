@@ -212,7 +212,7 @@ app.get('/v1/ai/:id/coverage', async (req, reply) => {
   { name: 'Organization-wide AI discovery', state: 'UNAVAILABLE', reason: 'No organization discovery connector is installed.' }
  ] };
 });
-const confirmationSchema = z.object({ organizationId: z.string().min(1).max(100), aiId: z.uuid(), claimEventId: z.uuid(), outcome: z.enum(['CONFIRMED','FAILED','ABSENT','UNREACHABLE']), source: z.string().regex(/^[A-Za-z0-9_.:-]{1,100}$/), occurredAt: z.iso.datetime({ offset: true }), evidenceHash: z.string().regex(/^[a-f0-9]{64}$/), externalEventId: z.string().regex(/^[A-Za-z0-9_.:-]{1,150}$/) });
+const confirmationSchema = z.object({ organizationId: z.string().min(1).max(100), aiId: z.uuid(), claimEventId: z.uuid(), outcome: z.enum(['CONFIRMED','FAILED','ABSENT','UNREACHABLE']), source: z.string().regex(/^[A-Za-z0-9_.:-]{1,100}$/), occurredAt: z.iso.datetime({ offset: true }), evidenceHash: z.string().regex(/^[a-f0-9]{64}$/), externalEventId: z.string().regex(/^[A-Za-z0-9_.:-]{1,150}$/) }).strict();
 app.post('/v1/integrations/action-confirmations', async (req, reply) => {
  if (!config.TRUSTED_ACTION_WEBHOOK_SECRET || !config.TRUSTED_ACTION_SOURCE) return reply.code(503).send({ error: 'CONNECTOR_NOT_CONFIGURED' });
  const body = confirmationSchema.parse(req.body);
@@ -226,6 +226,7 @@ app.post('/v1/integrations/action-confirmations', async (req, reply) => {
   const canonicalEvidence=await kernelStore.record(body.organizationId,{sourceType:'AUTHORITATIVE_SYSTEM',sourceName:body.source,collector:'trusted-action-connector',subjectType:'AI',subjectId:body.aiId,observationType:'ACTION_CONFIRMATION',content:{claimEventId:body.claimEventId,outcome:body.outcome,externalEventId:body.externalEventId,evidenceHash:body.evidenceHash},observedAt:body.occurredAt,collectedAt:new Date().toISOString(),validationState:body.outcome==='UNREACHABLE'?'UNAVAILABLE':'VERIFIED',evidenceType:'ACTION_CONFIRMATION',provenance:{externalEventId:body.externalEventId}}); await integrateEvidence(kernelStore,body.organizationId,{domain:'AI_FLIGHT',recordId:result.event.id,subjectType:'AI',subjectId:body.aiId,claimType:result.event.eventType,claimText:result.event.summary,findingType:'AUTHORITATIVE_ACTION_RESULT',state:result.event.state==='CONFLICTING'?'CONFLICTING':result.event.state==='UNAVAILABLE'?'UNKNOWN':'SUPPORTED',summary:result.event.summary,evidenceIds:[canonicalEvidence.evidenceId]}); if(result.alert)await integrateEvidence(kernelStore,body.organizationId,{domain:'INCIDENT',recordId:result.alert.id,subjectType:'AI',subjectId:body.aiId,claimType:'AI_CONTRADICTION_INCIDENT',claimText:result.alert.summary,findingType:'AI_CONTRADICTION',state:'CONFLICTING',summary:result.alert.summary,evidenceIds:[canonicalEvidence.evidenceId]}); return reply.code(201).send(result);
  } catch (error) {
   if (error instanceof Error && error.message === 'DUPLICATE_CONFIRMATION' || typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') return reply.code(409).send({ error: 'DUPLICATE_CONFIRMATION' });
+  if (error instanceof Error && error.message === 'INVALID_CONFIRMATION_TIME') return reply.code(422).send({ error: 'INVALID_CONFIRMATION_TIME' });
   throw error;
  }
 });
