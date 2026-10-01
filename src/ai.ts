@@ -51,7 +51,7 @@ class MemoryAiStore implements AiStore {
  async append(org: string, aiId: string, input: EventInput) { if (!await this.get(org, aiId)) return null; const events = this.events.get(aiId) ?? []; const event = { ...makeEvent(aiId, input, events.at(-1)?.eventHash ?? null), sequence: events.length + 1 }; events.push(event); this.events.set(aiId, events); return structuredClone(event); }
  async confirm(org: string, aiId: string, input: ConfirmationInput) {
   if (!await this.get(org, aiId)) return null;
-  const events = this.events.get(aiId) ?? []; const claim = events.find(e => e.id === input.claimEventId && e.sourceType === 'DECLARATION');
+  const events = this.events.get(aiId) ?? []; const claim = events.find(e => e.id === input.claimEventId && e.sourceType === 'DECLARATION' && e.eventType === 'ACTION_REQUESTED');
   if (!claim) return null;
   const key = `${org}:${input.source}:${input.externalEventId}`;
   if (this.confirmations.has(key)) throw new Error('DUPLICATE_CONFIRMATION');
@@ -91,7 +91,7 @@ class PgAiStore implements AiStore {
  async confirm(org: string, aiId: string, input: ConfirmationInput) {
   return this.sql.begin(async tx => {
    const systems = await tx`SELECT id FROM ai_identities WHERE organization_id=${org} AND id=${aiId} FOR UPDATE`; if (!systems.length) return null;
-   const rows = await tx<EventRow[]>`SELECT * FROM flight_records WHERE organization_id=${org} AND ai_identity_id=${aiId} AND id=${input.claimEventId} AND source_type='DECLARATION'`;
+   const rows = await tx<EventRow[]>`SELECT * FROM flight_records WHERE organization_id=${org} AND ai_identity_id=${aiId} AND id=${input.claimEventId} AND source_type='DECLARATION' AND event_type='ACTION_REQUESTED'`;
    if (!rows[0]) return null;
    const prior = await tx<{ event_hash: string }[]>`SELECT event_hash FROM flight_records WHERE organization_id=${org} AND ai_identity_id=${aiId} ORDER BY sequence DESC LIMIT 1`;
    const result = confirmation(aiId, eventFromRow(rows[0]), input, prior[0]?.event_hash ?? null);
