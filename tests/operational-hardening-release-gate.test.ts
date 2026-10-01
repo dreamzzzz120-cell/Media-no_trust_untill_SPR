@@ -1,0 +1,8 @@
+import{describe,it,expect}from'vitest';import{SLOS,RATE_LIMITS,classifyRoute,unknownOnDependencyFailure,boundedBackoff,validateSecurityHeaders}from'../src/operational-hardening.js';
+describe('operational hardening release gate',()=>{
+ it('locks explicit production SLOs',()=>{expect(SLOS.apiAvailability.target).toBeGreaterThanOrEqual(.999);expect(SLOS.apiLatency.p95Ms).toBeLessThanOrEqual(750);expect(SLOS.ingestionSuccess.target).toBeGreaterThanOrEqual(.995);expect(SLOS.m2mVerification.target).toBeGreaterThanOrEqual(.999);expect(SLOS.scannerAvailability.target).toBeGreaterThanOrEqual(.995)});
+ it('separates expensive endpoint classes',()=>{expect(classifyRoute('POST','/v1/media/upload')).toBe('UPLOAD');expect(classifyRoute('POST','/v1/customer/reports')).toBe('REPORT_EXPORT');expect(classifyRoute('GET','/v1/customer/constellation')).toBe('GRAPH_HEAVY');expect(RATE_LIMITS.UPLOAD.max).toBeLessThan(RATE_LIMITS.DEFAULT.max)});
+ it('dependency loss becomes UNKNOWN and retryable',()=>expect(unknownOnDependencyFailure('scanner',Error('down'))).toMatchObject({state:'UNKNOWN',retryable:true}));
+ it('uses bounded exponential backoff with jitter',()=>{expect(boundedBackoff(1,1000,3600000,.2,()=>0)).toBe(800);expect(boundedBackoff(20,1000,3600000,.2,()=>1)).toBeLessThanOrEqual(4320000)});
+ it('validates required browser security headers',()=>expect(validateSecurityHeaders({'strict-transport-security':'max-age=31536000','x-content-type-options':'nosniff','referrer-policy':'no-referrer','content-security-policy':"default-src 'self'; frame-ancestors 'none'"})).toEqual({hsts:true,nosniff:true,referrer:true,frame:true,csp:true}));
+});
