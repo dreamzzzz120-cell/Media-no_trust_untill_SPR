@@ -42,6 +42,17 @@ describe('upload adversarial boundary', () => {
     const link=join(root,'quarantine','link.png'); await symlink(outside,link);
     await expect(promoteStoredMedia({id:'x',path:link,sha256:'0'.repeat(64),sizeBytes:tinyPng.length,mime:'image/png',kind:'image',originalFilename:'link.png'},root)).rejects.toThrow('UNSAFE_MEDIA_FILE');
   });
+  it('rejects an image/archive polyglot', async () => {
+    const root=await mkdtemp(join(tmpdir(),'constellation-upload-'));
+    const polyglot=Buffer.concat([tinyPng,Buffer.from([0x50,0x4b,0x03,0x04]),Buffer.alloc(32),Buffer.from([0x50,0x4b,0x05,0x06])]);
+    await expect(storeUpload(Readable.from(polyglot),'polyglot.png','image/png',root,1024*1024)).rejects.toThrow('ARCHIVE_POLYGLOT_REJECTED');
+    expect(await readdir(join(root,'quarantine'))).toEqual([]);
+  });
+  it('rejects a pure archive before any decompression or parser expansion', async () => {
+    const root=await mkdtemp(join(tmpdir(),'constellation-upload-'));
+    const zip=Buffer.concat([Buffer.from([0x50,0x4b,0x03,0x04]),Buffer.alloc(256)]);
+    await expect(storeUpload(Readable.from(zip),'bomb.png','application/octet-stream',root,1024*1024)).rejects.toThrow('UNSUPPORTED_MEDIA_TYPE');
+  });
   it('refuses deletion outside the configured storage root', async () => {
     const root=await mkdtemp(join(tmpdir(),'constellation-upload-'));
     await expect(deleteStoredMedia('/etc/passwd',root)).rejects.toThrow('Unsafe storage path');
