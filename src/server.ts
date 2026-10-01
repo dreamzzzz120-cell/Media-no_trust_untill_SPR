@@ -60,12 +60,29 @@ const aiStatuses = ['NONE','AI_ASSISTED','AI_EDITED','AI_GENERATED','AI_SYNTHETI
 await app.register(helmet, { global: true });
 await app.register(rateLimit, { max: config.RATE_LIMIT_MAX, timeWindow: config.RATE_LIMIT_WINDOW_MS });
 app.addHook('onRoute',(route:any)=>{const cls=classifyRoute(String(route.method),String(route.url));const limit=RATE_LIMITS[cls];route.config={...(route.config??{}),rateLimit:{max:limit.max,timeWindow:limit.windowMs}}});
-await app.register(multipart, { limits: { fileSize: config.MAX_UPLOAD_BYTES, files: 1, fields: 8 } });
+await app.register(multipart, { limits: { fileSize: config.MAX_UPLOAD_BYTES, files: 1, fields: 8, fieldSize: 65_536, parts: 9 } });
 await app.register(fastifyStatic, { root: resolve('public'), prefix: '/' });
 await app.register(swagger, { openapi: { info: { title: 'Media Passport API', version: '1.0.0' }, servers: [{ url: '/' }], tags: [{ name: 'media' }, { name: 'passport' }, { name: 'trust' }, { name: 'cases' }, { name: 'admin' }] } });
 await app.register(swaggerUi, { routePrefix: '/docs' });
 const publicPath = (url: string) => { const path = new URL(url, 'http://localhost').pathname; return path === '/health' || path === '/ready' || path === '/ready/ai' || path === '/' || path === '/v1/integrations/action-confirmations' || path === '/v1/billing/provider-events' || path.startsWith('/public/') || path.startsWith('/passport/') || path.startsWith('/app.') || path.startsWith('/styles.') || path.startsWith('/passport.') || path === '/ai.html' || path === '/ai.js' || path === '/docs' || path.startsWith('/docs/'); };
 app.decorateRequest('mediaAuth', null);
+app.addHook('onRequest', async (req, reply) => {
+  reply.header('x-request-id', req.id);
+});
+app.addHook('onSend', async (req, reply, payload) => {
+  if (reply.statusCode < 400 || typeof payload !== 'string') return payload;
+  const contentType=String(reply.getHeader('content-type') ?? '');
+  if (!contentType.includes('application/json')) return payload;
+  try {
+    const body=JSON.parse(payload) as Record<string,unknown>;
+    if (!body || Array.isArray(body) || typeof body !== 'object') return payload;
+    if (typeof body.error !== 'string') return payload;
+    if (body.requestId === undefined) body.requestId=req.id;
+    return JSON.stringify(body);
+  } catch {
+    return payload;
+  }
+});
 app.addHook('onRequest', async (req, reply) => {
   if (publicPath(req.url) || !config.REQUIRE_API_KEY) return;
   const supplied = req.headers['x-api-key'];
@@ -74,13 +91,13 @@ app.addHook('onRequest', async (req, reply) => {
   const expected = config.API_KEY;
   if (expected) { const suppliedBuffer = Buffer.from(supplied); const expectedBuffer = Buffer.from(expected); if (suppliedBuffer.length === expectedBuffer.length && timingSafeEqual(suppliedBuffer, expectedBuffer)) { req.mediaAuth = { keyId: 'bootstrap', organizationId: null, role: config.BOOTSTRAP_API_ROLE }; return; } }
   const identity = await store.authenticateApiKey(supplied);
-  if (!identity) { req.log.warn({ ip:req.ip, route:req.routeOptions?.url ?? new URL(req.url,'http://localhost').pathname }, 'authentication rejected'); return rejectAuth(); }
+  if (!identity) { req.log.warn({ event:'AUTHENTICATION_FAILURE', requestId:req.id, ip:req.ip, route:req.routeOptions?.url ?? new URL(req.url,'http://localhost').pathname }, 'authentication rejected'); return rejectAuth(); }
   req.mediaAuth = identity;
 });
 function auth(req: { mediaAuth: ApiIdentity | null }): ApiIdentity { if (!req.mediaAuth) throw new Error('UNAUTHORIZED'); return req.mediaAuth; }
 const tenantReadRoles:ApiRole[]=['viewer','creator','reviewer','moderator','analyst','organization_admin','platform_admin','super_admin'];
 const sensitiveReadRoles:ApiRole[]=['reviewer','moderator','analyst','organization_admin','platform_admin','super_admin'];
-function requireRole(req:FastifyRequest & {mediaAuth:ApiIdentity|null},reply:any,allowed:ApiRole[]):boolean{const identity=auth(req);if(!allowed.includes(identity.role)){req.log.warn({keyId:identity.keyId,organizationId:identity.organizationId,role:identity.role},'authorization rejected');void reply.code(403).send({error:'FORBIDDEN'});return false}return true}
+function requireRole(req:FastifyRequest & {mediaAuth:ApiIdentity|null},reply:any,allowed:ApiRole[]):boolean{const identity=auth(req);if(!allowed.includes(identity.role)){req.log.warn({event:'AUTHORIZATION_FAILURE',requestId:req.id,keyId:identity.keyId,organizationId:identity.organizationId,role:identity.role},'authorization rejected');void reply.code(403).send({error:'FORBIDDEN'});return false}return true}
 function requireTenantRead(req:any,reply:any,sensitive=false):boolean{return requireRole(req,reply,sensitive?sensitiveReadRoles:tenantReadRoles)}
 app.addHook('preHandler',async(req,reply)=>{if(publicPath(req.url)||!req.mediaAuth?.organizationId||!tenantQuotaStore)return;const path=new URL(req.url,'http://localhost').pathname;const cls=classifyRoute(req.method,path);const lim=RATE_LIMITS[cls];const q=await tenantQuotaStore.consume(req.mediaAuth.organizationId,cls,lim.max,lim.windowMs);reply.header('x-ratelimit-remaining',String(q.remaining));if(q.resetAt)reply.header('x-ratelimit-reset',q.resetAt);if(!q.allowed)return reply.code(429).send({error:'TENANT_RATE_LIMITED',rateClass:cls,resetAt:q.resetAt})});
 app.get('/health', async () => ({ status: 'ok', service: 'constellation', version: '1.0.0', release: config.RELEASE_COMMIT }));
@@ -257,6 +274,6 @@ app.post('/v1/media/:id/report', async (req, reply) => { const record = await ge
 app.post('/v1/recommendation/evaluate', async (req, reply) => { if (!requireRole(req, reply, ['analyst','moderator','organization_admin','platform_admin','super_admin'])) return; const body = z.object({ passportId: z.string().min(10).max(40), minTrust: z.number().min(0).max(100).default(70), requireProvenance: z.boolean().default(false), requireDisclosure: z.boolean().default(true) }).parse(req.body); const record = await getRecord(body.passportId, reply, req.mediaAuth); if (!record) return; const eligible = (record.trustScore ?? 0) >= body.minTrust && (!body.requireProvenance || record.provenance.status === 'verified') && (!body.requireDisclosure || !record.limitations.some(x => /disclosure/i.test(x))); return { passportId: record.asset.id, eligible, decision: record.decision, trustScore: record.trustScore, confidence: record.confidence, reasons: eligible ? ['Trust threshold met', 'No blocking decision'] : ['Recommendation criteria not satisfied'], explainability: { trust: record.trustVector, provenance: record.provenance.status, aiStatus: record.aiStatus } }; });
 app.get('/public/:id', async (_req, reply) => reply.code(404).send({ error: 'NOT_FOUND' }));
 app.get('/passport/:id', async (_req, reply) => reply.code(404).send({ error: 'NOT_FOUND' }));
-app.setErrorHandler((error, req, reply) => { if (error instanceof z.ZodError) return reply.code(400).send({ error: 'INVALID_REQUEST', issues: error.issues }); const message = error instanceof Error ? error.message : String(error); if ((error as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE' || message === 'UPLOAD_TOO_LARGE') return reply.code(413).send({ error: 'UPLOAD_TOO_LARGE' }); if (message === 'UNSUPPORTED_MEDIA_TYPE') return reply.code(415).send({ error: message }); if (message === 'MIME_MISMATCH') return reply.code(400).send({ error: message }); req.log.error({ err: error }, 'request failed'); return reply.code(500).send({ error: 'INTERNAL_ERROR' }); });
+app.setErrorHandler((error, req, reply) => { if (error instanceof z.ZodError) return reply.code(400).send({ error: 'INVALID_REQUEST', requestId:req.id, issues: error.issues }); const message = error instanceof Error ? error.message : String(error); if ((error as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE' || message === 'UPLOAD_TOO_LARGE') return reply.code(413).send({ error: 'UPLOAD_TOO_LARGE', requestId:req.id }); if (message === 'UNSUPPORTED_MEDIA_TYPE') return reply.code(415).send({ error: message, requestId:req.id }); if (message === 'MIME_MISMATCH') return reply.code(400).send({ error: message, requestId:req.id }); req.log.error({ event:'UNHANDLED_REQUEST_ERROR', requestId:req.id, err: error }, 'request failed'); return reply.code(500).send({ error: 'INTERNAL_ERROR', requestId:req.id }); });
 const shutdown = async (signal: string) => { app.log.info({ signal }, 'shutting down'); await app.close(); await store.close(); await aiStore.close(); await constellationStore.close(); await accountabilityStore.close(); await kernelStore.close(); process.exit(0); };
 process.once('SIGTERM', () => void shutdown('SIGTERM')); process.once('SIGINT', () => void shutdown('SIGINT')); await app.listen({ host: config.HOST, port: config.PORT });
