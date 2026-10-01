@@ -2,6 +2,11 @@
 const $=id=>document.getElementById(id);
 const state={snapshot:null,dashboard:null,reports:[],generation:0,controller:null};
 const key=()=>($('key').value||'').trim();
+const ALLOWED_VIEWS=new Set(['universe','galaxy','passport','evidence','monitoring','media','reports','timeline']);
+function clearSensitiveState(message='Disconnected. Tenant evidence cleared.'){state.controller?.abort();state.controller=null;state.snapshot=null;state.dashboard=null;state.reports=[];state.generation++;drawUniverse();renderEvidence();renderReports();$('coverage').textContent='UNKNOWN';$('workspaceState').textContent='Connect tenant evidence';status(message,'warning')}
+function validApiKey(v){return typeof v==='string'&&v.length>=16&&v.length<=512&&!/[\r\n\0]/.test(v)}
+window.addEventListener('pagehide',()=>{state.controller?.abort();$('key').value='';});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')state.controller?.abort()});
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=String(text);return n};
 const clear=n=>{while(n.firstChild)n.removeChild(n.firstChild)};
 const fmt=v=>{const d=new Date(v);return Number.isFinite(d.getTime())?d.toLocaleString():'UNKNOWN'};
@@ -35,7 +40,7 @@ function renderEvidence(){const rows=Array.isArray(state.dashboard?.evidence)?st
 function renderReports(){const root=$('reports');clear(root);if(!state.reports.length){root.append(el('div','empty','No persisted customer reports.'));return}for(const r of state.reports){const row=el('div','report-card');row.append(el('b','',r.report_type||'UNKNOWN'),el('span','',(r.coverage_state||'UNKNOWN')+' · '+fmt(r.as_of)),el('code','',r.content_hash||'UNKNOWN'));root.append(row)}}
 async function loadOps(signal){let ready=null,readyError=null,q=null,queueError=null;try{ready=await request('/ready',{signal},false)}catch(e){if(e.name==='AbortError')throw e;readyError=e}try{q=await request('/v1/webhooks/operations',{signal})}catch(e){if(e.name==='AbortError')throw e;queueError=e}const cells=$('ops').children;const set=(cell,value,reason)=>{cell.querySelector('strong').textContent=value;cell.title=reason};set(cells[0],ready?.database?.ok===true?'READY':ready?.database?.ok===false?'UNAVAILABLE':'UNKNOWN',ready?.database?.ok===true?'Database readiness was observed by /ready.':ready?.database?.ok===false?'The readiness endpoint reported database unavailable.':readyError?'Readiness could not be observed: '+readyError.message:'Database state was not returned.');set(cells[1],ready?.scanner?.ok===true?'READY':ready?.scanner?.ok===false?'UNAVAILABLE':'NOT ASSESSED',ready?.scanner?.ok===true?'Scanner readiness was observed by /ready.':ready?.scanner?.ok===false?'The readiness endpoint reported scanner unavailable.':'Scanner state was not observed.');set(cells[2],q?.queue?'OBSERVED':queueError?'UNKNOWN':'NOT ASSESSED',q?.queue?JSON.stringify(q.queue):queueError?'Webhook queue could not be observed: '+queueError.message:'No webhook queue observation was returned.');const coverage=state.snapshot?.coverage?.state||'UNKNOWN';set(cells[3],coverage,coverage==='OBSERVED'?(state.snapshot?.coverage?.note||'Persisted tenant observations are visible.'):(state.snapshot?.coverage?.note||'No positive coverage conclusion is inferred.'))}
 async function connect(){
- if(!key()){status('Enter a tenant API key.','error');$('key').focus();return}
+ if(!key()){status('Enter a tenant API key.','error');$('key').focus();return}if(!validApiKey(key())){clearSensitiveState('Tenant API key format rejected. No request was sent.');$('key').focus();return}
  state.controller?.abort();const controller=new AbortController();state.controller=controller;const generation=++state.generation;const timer=setTimeout(()=>controller.abort(),15000);$('connect').disabled=true;$('refresh').disabled=true;status('Reading persisted tenant evidence…');
  try{
   const settled=await Promise.allSettled([request('/v1/customer/constellation?limit=250',{signal:controller.signal}),request('/v1/customer/dashboard?limit=250',{signal:controller.signal}),request('/v1/customer/reports?limit=20',{signal:controller.signal})]);if(generation!==state.generation)return;
@@ -46,6 +51,7 @@ async function connect(){
 }
 $('connect').onclick=connect;$('refresh').onclick=connect;$('key').addEventListener('keydown',e=>{if(e.key==='Enter')connect()});$('closeInspector').onclick=()=>{const r=$('entityDetail');clear(r);r.append(el('div','empty','Select the Sun, a star, or an observed phenomenon.'))};
 $('createReport').onclick=async()=>{if(!key()){status('Enter a tenant API key.','error');return}if(!confirm('Create a persisted evidence-derived Constellation report for the current tenant?'))return;$('createReport').disabled=true;try{const r=await request('/v1/customer/reports',{method:'POST',body:JSON.stringify({reportType:'CONSTELLATION_UNIVERSE',asOf:new Date().toISOString()})});status('Evidence-derived report created: '+r.contentHash,'ok');await connect()}catch(e){status(e.message,'error')}finally{$('createReport').disabled=false}};
+$('key').addEventListener('input',()=>{if(state.snapshot)clearSensitiveState('Tenant key changed. Previously loaded evidence was cleared; reconnect to verify the new tenant.')});
 void readiness();
 const VIEW_META={
  universe:{title:'Universe',doc:'Constellation / Universe',eyebrow:'COMMAND MAP',description:'Observe the tenant as an evidence-backed system of stars, relationships and phenomena.'},
@@ -57,6 +63,6 @@ const VIEW_META={
  reports:{title:'Reports',doc:'Constellation / Reports',eyebrow:'EVIDENCE OUTPUTS',description:'Create and inspect persisted reports derived from the tenant evidence currently visible.'},
  timeline:{title:'Timeline',doc:'Constellation / Timeline',eyebrow:'SPACE-TIME',description:'Review observed changes and phenomena in time without inferring motive, safety or compliance.'}
 };
-function routeView(){const raw=(location.hash||'#universe').slice(1);const view=VIEW_META[raw]?raw:'universe';document.body.dataset.activeView=view;document.querySelectorAll('[data-view-link]').forEach(a=>a.classList.toggle('active',a.dataset.viewLink===view));const meta=VIEW_META[view];const crumb=document.querySelector('header>div:first-child');if(crumb){clear(crumb);crumb.append(el('span','crumb','Constellation /'),document.createTextNode(' '),el('b','',meta.title))}document.title=meta.doc;$('viewEyebrow').textContent=meta.eyebrow;$('viewTitle').textContent=meta.title;$('viewDescription').textContent=meta.description;}
+function routeView(){const raw=(location.hash||'#universe').slice(1).toLowerCase();const view=ALLOWED_VIEWS.has(raw)&&VIEW_META[raw]?raw:'universe';document.body.dataset.activeView=view;document.querySelectorAll('[data-view-link]').forEach(a=>a.classList.toggle('active',a.dataset.viewLink===view));const meta=VIEW_META[view];const crumb=document.querySelector('header>div:first-child');if(crumb){clear(crumb);crumb.append(el('span','crumb','Constellation /'),document.createTextNode(' '),el('b','',meta.title))}document.title=meta.doc;$('viewEyebrow').textContent=meta.eyebrow;$('viewTitle').textContent=meta.title;$('viewDescription').textContent=meta.description;}
 window.addEventListener('hashchange',routeView);
 routeView();
