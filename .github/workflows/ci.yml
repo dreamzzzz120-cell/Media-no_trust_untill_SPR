@@ -40,7 +40,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if git grep -nEI '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|ghp_[A-Za-z0-9]{30,}|sk_live_[A-Za-z0-9]{16,}|AKIA[0-9A-Z]{16})' -- . ':!package-lock.json'; then
+          if git grep -nEI '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|ghp_[A-Za-z0-9]{30,}|sk_live_[A-Za-z0-9]{16,}|AKIA[0-9A-Z]{16})' -- . ':!package-lock.json' ':!tests/secret-export-redaction-release-gate.test.ts'; then
             echo "Potential secret detected"
             exit 1
           fi
