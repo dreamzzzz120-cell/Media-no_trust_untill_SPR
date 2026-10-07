@@ -25,7 +25,7 @@ beforeAll(async () => {
   const scannerPort = await listen(scanner);
   const probe = createServer(); const appPort = await listen(probe); await new Promise<void>((resolve) => probe.close(() => resolve()));
   url = `http://127.0.0.1:${appPort}`;
-  app = spawn(process.execPath, ['--import', 'tsx', 'src/server.ts'], { cwd: process.cwd(), env: { ...process.env, NODE_ENV: 'test', PORT: String(appPort), HOST: '127.0.0.1', API_KEY: bootstrap, REQUIRE_API_KEY: 'true', UPLOAD_DIR: root, MALWARE_SCAN_URL: `http://127.0.0.1:${scannerPort}`, MALWARE_SCAN_TOKEN: 'test-scanner-token-12345678901234567890', C2PA_VERIFY_TRUST: 'false' }, stdio: 'pipe' });
+  app = spawn(process.execPath, ['--import', 'tsx', 'src/server.ts'], { cwd: process.cwd(), env: { ...process.env, NODE_ENV: 'test', PORT: String(appPort), HOST: '127.0.0.1', API_KEY: bootstrap, REQUIRE_API_KEY: 'true', UPLOAD_DIR: root, MALWARE_SCAN_URL: `http://127.0.0.1:${scannerPort}/scan`, MALWARE_SCAN_TOKEN: 'test-scanner-token-12345678901234567890', C2PA_VERIFY_TRUST: 'false' }, stdio: 'pipe' });
   for (let i = 0; i < 100; i++) { if (app.exitCode !== null) throw new Error('Media server exited during startup'); try { if ((await fetch(url + '/health')).ok) break; } catch { /* waiting for startup */ } await new Promise((resolve) => setTimeout(resolve, 100)); if (i === 99) throw new Error('Media server did not start'); }
   const orgA = await json('/v1/organizations', bootstrap, { method: 'POST', body: JSON.stringify({ name: 'Publisher A' }), headers: { 'content-type': 'application/json' } });
   const orgB = await json('/v1/organizations', bootstrap, { method: 'POST', body: JSON.stringify({ name: 'Publisher B' }), headers: { 'content-type': 'application/json' } });
